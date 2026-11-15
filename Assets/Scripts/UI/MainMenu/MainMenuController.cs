@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using TMPro;
 using Unity.Netcode;
@@ -77,7 +78,7 @@ public class MainMenuController : MonoBehaviour
         ValidateNameInput(inputFieldNama.text);
         ValidateCodeInput(inputFieldCode.text);
 
-        NetworkPlayerData.OnPlayerListChanged += UpdateLobbyPlayerListUI;
+        NetworkLobbyManager.OnLobbyUpdated += UpdateLobbyPlayerListUI;
         if (NetworkManager.Singleton != null)
         {
             NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
@@ -89,7 +90,7 @@ public class MainMenuController : MonoBehaviour
 
     private void OnDestroy()
     {
-        NetworkPlayerData.OnPlayerListChanged -= UpdateLobbyPlayerListUI;
+        NetworkLobbyManager.OnLobbyUpdated -= UpdateLobbyPlayerListUI;
         if (NetworkManager.Singleton != null)
         {
             NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
@@ -190,7 +191,7 @@ public class MainMenuController : MonoBehaviour
         try
         {
             var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
-            string joinCode = "LOCAL1";
+            string joinCode = GenerateRandomCode(6);
 
             if (ShouldUseRelay())
             {
@@ -222,10 +223,14 @@ public class MainMenuController : MonoBehaviour
         {
             Debug.LogError($"Gagal membuat Host: {e.Message}");
         }
-        finally
-        {
-            ValidateNameInput(inputFieldNama.text);
-        }
+    }
+
+    private string GenerateRandomCode(int length)
+    {
+        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        System.Random random = new System.Random();
+        return new string(Enumerable.Repeat(chars, length)
+            .Select(s => s[random.Next(s.Length)]).ToArray());
     }
 
     private async Task StartClientMultiplayerAsync()
@@ -273,12 +278,26 @@ public class MainMenuController : MonoBehaviour
 
     private void UpdateLobbyPlayerListUI()
     {
+        if (NetworkLobbyManager.Instance == null) return;
+
+        var players = NetworkLobbyManager.Instance.LobbyPlayers;
+
         for (int i = 0; i < playerTexts.Length; i++)
         {
-            if (i < NetworkPlayerData.ConnectedPlayers.Count)
+            if (i < players.Count)
             {
-                string pName = NetworkPlayerData.ConnectedPlayers[i].PlayerName.Value.ToString();
-                playerTexts[i].text = string.IsNullOrEmpty(pName) ? "Connecting..." : pName;
+                string pName = players[i].PlayerName.ToString();
+                if (players[i].IsHost)
+                {
+                    pName += " (Host)"; // Pastikan tidak ada karakter \n (enter) di sini
+                }
+                playerTexts[i].text = pName;
+
+                // Tampilkan tombol Play hanya jika kita adalah Host saat ini
+                if (players[i].ClientId == NetworkManager.Singleton.LocalClientId)
+                {
+                    buttonPlayGame.gameObject.SetActive(players[i].IsHost);
+                }
             }
             else
             {
@@ -295,16 +314,28 @@ public class MainMenuController : MonoBehaviour
         }
     }
 
-    private void LeaveLobby()
+    private async void LeaveLobby()
     {
+        // Matikan tombol interaksi agar tidak diklik dua kali
+        buttonExitHost.interactable = false;
+
         if (NetworkManager.Singleton != null && (NetworkManager.Singleton.IsConnectedClient || NetworkManager.Singleton.IsHost))
         {
             NetworkManager.Singleton.Shutdown();
+
+            // Tunggu sampai NetworkManager benar-benar mati
+            while (NetworkManager.Singleton.IsListening)
+            {
+                await Task.Yield();
+            }
         }
 
-        NetworkPlayerData.ConnectedPlayers.Clear();
         UpdateLobbyPlayerListUI();
         ShowPanel(panelSelection);
+
+        // Nyalakan tombol kembali untuk penggunaan berikutnya
+        buttonExitHost.interactable = true;
+        buttonHost.interactable = true;
     }
 
     private void OnClientConnected(ulong clientId)
@@ -316,8 +347,18 @@ public class MainMenuController : MonoBehaviour
     {
         if (clientId == NetworkManager.Singleton.LocalClientId || clientId == NetworkManager.ServerClientId)
         {
-            NetworkPlayerData.ConnectedPlayers.Clear();
+            if (NetworkLobbyManager.Instance != null && NetworkLobbyManager.Instance.LobbyPlayers != null)
+            {
+                NetworkLobbyManager.Instance.LobbyPlayers.Clear();
+            }
+
+            textCode.text = string.Empty;
+            UpdateLobbyPlayerListUI();
             ShowPanel(panelSelection);
+
+            // Pastikan tombol bisa ditekan lagi
+            buttonHost.interactable = true;
+            buttonJoinSelection.interactable = true;
         }
         else
         {
