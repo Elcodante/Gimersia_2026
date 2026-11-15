@@ -1150,19 +1150,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 254863489}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 155772777}
-        m_TargetAssemblyTypeName: UnityEngine.GameObject, UnityEngine
-        m_MethodName: SetActive
-        m_Mode: 6
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+      m_Calls: []
 --- !u!114 &254863489
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1410,19 +1398,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 407320513}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 865150541}
-        m_TargetAssemblyTypeName: UnityEngine.GameObject, UnityEngine
-        m_MethodName: SetActive
-        m_Mode: 6
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 1
-        m_CallState: 2
+      m_Calls: []
 --- !u!114 &407320513
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1754,7 +1730,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &761123813
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2128,19 +2104,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 820978194}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 761123812}
-        m_TargetAssemblyTypeName: UnityEngine.GameObject, UnityEngine
-        m_MethodName: SetActive
-        m_Mode: 6
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+      m_Calls: []
 --- !u!114 &820978194
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3011,6 +2975,7 @@ GameObject:
   - component: {fileID: 1046609185}
   - component: {fileID: 1046609184}
   - component: {fileID: 1046609183}
+  - component: {fileID: 1046609187}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -3104,6 +3069,42 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 0}
+--- !u!114 &1046609187
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1046609182}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2b2302fb082dec24090c3d63aaf5f688, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MainMenuController
+  gameSceneName: In_Game_Raka
+  maxPlayers: 4
+  useRelayInEditor: 0
+  panelMainMenu: {fileID: 1157586149}
+  panelSelection: {fileID: 865150541}
+  panelHost: {fileID: 155772777}
+  panelJoin: {fileID: 761123812}
+  buttonPlaySolo: {fileID: 1534215957}
+  buttonPlayMultiplayer: {fileID: 407320512}
+  inputFieldNama: {fileID: 1444097497}
+  buttonHost: {fileID: 1665284114}
+  buttonJoinSelection: {fileID: 1849478601}
+  buttonExitSelection: {fileID: 1501106690}
+  textCode: {fileID: 622770829}
+  playerTexts:
+  - {fileID: 1985557397}
+  - {fileID: 23442404}
+  - {fileID: 1010146898}
+  - {fileID: 885973937}
+  buttonPlayGame: {fileID: 1821600520}
+  buttonExitHost: {fileID: 254863488}
+  inputFieldCode: {fileID: 40127713}
+  buttonJoinRoom: {fileID: 49986475}
+  buttonExitJoin: {fileID: 820978193}
 --- !u!1 &1079900542
 GameObject:
   m_ObjectHideFlags: 0
@@ -3258,7 +3259,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1157586150
 RectTransform:
   m_ObjectHideFlags: 0
@@ -3958,19 +3959,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1501106691}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 865150541}
-        m_TargetAssemblyTypeName: UnityEngine.GameObject, UnityEngine
-        m_MethodName: SetActive
-        m_Mode: 6
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+      m_Calls: []
 --- !u!114 &1501106691
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4212,19 +4201,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1665284115}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 865150541}
-        m_TargetAssemblyTypeName: UnityEngine.GameObject, UnityEngine
-        m_MethodName: SetActive
-        m_Mode: 6
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 1
-        m_CallState: 2
+      m_Calls: []
 --- !u!114 &1665284115
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4605,19 +4582,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1849478602}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 865150541}
-        m_TargetAssemblyTypeName: UnityEngine.GameObject, UnityEngine
-        m_MethodName: SetActive
-        m_Mode: 6
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 1
-        m_CallState: 2
+      m_Calls: []
 --- !u!114 &1849478602
 MonoBehaviour:
   m_ObjectHideFlags: 0
