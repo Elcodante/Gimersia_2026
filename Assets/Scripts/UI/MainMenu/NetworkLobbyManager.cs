@@ -66,11 +66,12 @@ public class NetworkLobbyManager : NetworkBehaviour
         if (IsServer && NetworkManager.Singleton != null)
         {
             NetworkManager.Singleton.OnClientDisconnectCallback -= HandleClientDisconnect;
+            // Server boleh membersihkan daftar
+            LobbyPlayers.Clear();
         }
         LobbyPlayers.OnListChanged -= HandleLobbyPlayersChanged;
 
-        // Hapus isi UI secara lokal saat keluar
-        LobbyPlayers.Clear();
+        // Panggil event agar UI di layar masing-masing jadi kosong
         OnLobbyUpdated?.Invoke();
     }
 
