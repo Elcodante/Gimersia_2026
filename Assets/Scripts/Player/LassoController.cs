@@ -102,7 +102,7 @@ public class LassoController : NetworkBehaviour
     {
         Debug.Log("[LASO SERVER] Perintah berhenti diterima.");
         isLassoActive.Value = false;
-        if (boatController == null) boatController = FindFirstObjectByType<BoatController>();
+        if (boatController == null) boatController = transform.parent.GetComponent<BoatController>();
 
         // Matikan mesin penarik perahu
         if (boatController != null) boatController.StopPull();
