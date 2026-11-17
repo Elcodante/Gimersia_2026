@@ -9,47 +9,44 @@ public class PlayerMovement : NetworkBehaviour
     [SerializeField] private float rotationSpeed = 10f;
 
     private Rigidbody rb;
-    private Rigidbody parentBoatRb;
+    private bool isFallingOff = false;
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+        // Wajib None agar Rigidbody tidak menahan perubahan transform di Update
+        rb.interpolation = RigidbodyInterpolation.None;
     }
 
     public override void OnNetworkSpawn()
     {
-        if (IsOwner)
+        rb.isKinematic = true;
+        rb.interpolation = RigidbodyInterpolation.None;
+
+        // Pengaman tambahan: Jika Server lupa melakukan parenting di GameSpawner, otomatis kaitkan ke kapal
+        if (IsServer && transform.parent == null)
         {
-            rb.isKinematic = false;
-            rb.interpolation = RigidbodyInterpolation.Interpolate;
-        }
-        else
-        {
-            // Di layar pemain lain, matikan fisika agar murni mengikuti posisi lokal di kapal
-            rb.isKinematic = true;
+            BoatController boat = FindFirstObjectByType<BoatController>();
+            if (boat != null)
+            {
+                NetworkObject.TrySetParent(boat.NetworkObject, true);
+            }
         }
     }
 
-    // Gunakan FixedUpdate karena kita berinteraksi langsung dengan Rigidbody kapal & pemain
-    private void FixedUpdate()
+    private void Update()
     {
-        if (!IsSpawned || !IsOwner) return;
-
-        // Cari Rigidbody kapal jika kita sedang berada di atas kapal (sebagai child)
-        if (transform.parent != null && parentBoatRb == null)
-        {
-            parentBoatRb = transform.parent.GetComponent<Rigidbody>();
-        }
+        if (!IsSpawned || !IsOwner || !Application.isFocused) return;
 
         HandleMovement();
+        CheckIfStillOnBoat();
     }
 
     private void HandleMovement()
     {
         Vector2 inputVector = Vector2.zero;
 
-        // Hanya baca input jika jendela game sedang aktif/fokus
-        if (Application.isFocused && Keyboard.current != null)
+        if (Keyboard.current != null)
         {
             if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed) inputVector.y += 1f;
             if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed) inputVector.y -= 1f;
@@ -58,31 +55,65 @@ public class PlayerMovement : NetworkBehaviour
         }
 
         inputVector.Normalize();
+        Vector3 worldMoveDir = new Vector3(inputVector.x, 0f, inputVector.y);
 
-        // 1. Hitung kecepatan jalan dari input pemain (WASD)
-        Vector3 playerInputVelocity = new Vector3(inputVector.x, 0f, inputVector.y) * moveSpeed;
-
-        // 2. Ambil kecepatan gerak kapal saat ini (jika pemain masih di atas kapal)
-        Vector3 boatVelocity = Vector3.zero;
-        if (parentBoatRb != null)
+        if (worldMoveDir.magnitude >= 0.1f)
         {
-            boatVelocity = parentBoatRb.linearVelocity;
+            if (transform.parent != null)
+            {
+                // Ubah arah gerak layar (World) menjadi arah lokal kapal
+                Vector3 localMoveDir = transform.parent.InverseTransformDirection(worldMoveDir);
+                transform.localPosition += localMoveDir * moveSpeed * Time.deltaTime;
+            }
+            else
+            {
+                transform.position += worldMoveDir * moveSpeed * Time.deltaTime;
+            }
+
+            Quaternion targetRotation = Quaternion.LookRotation(worldMoveDir, Vector3.up);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
         }
+    }
 
-        // 3. GABUNGKAN kecepatan kapal + kecepatan jalan pemain!
-        // Dengan cara ini, saat pemain diam (input = 0), kecepatan karakter = kecepatan kapal (ikut terbawa kapal).
-        // Sumbu Y tetap menggunakan gravitasi asli karakter agar tetap menapak dan bisa jatuh ke sungai.
-        rb.linearVelocity = new Vector3(
-            boatVelocity.x + playerInputVelocity.x,
-            rb.linearVelocity.y,
-            boatVelocity.z + playerInputVelocity.z
-        );
+    private void CheckIfStillOnBoat()
+    {
+        // Hanya cek jika pemain masih berada di atas kapal
+        if (isFallingOff || transform.parent == null) return;
 
-        // 4. Putar karakter menghadap arah jalan jika sedang menekan WASD
-        if (playerInputVelocity.sqrMagnitude > 0.01f)
+        // Jika di bawah kaki sudah tidak ada dek kapal, lepaskan dari kapal agar jatuh ke air
+        if (!IsBoatBelow())
         {
-            Quaternion targetRotation = Quaternion.LookRotation(playerInputVelocity.normalized, Vector3.up);
-            rb.MoveRotation(Quaternion.Slerp(rb.rotation, targetRotation, rotationSpeed * Time.fixedDeltaTime));
+            isFallingOff = true;
+            FallOffBoatServerRpc();
         }
+    }
+
+    private bool IsBoatBelow()
+    {
+        // Tembakkan sinar 3 meter ke bawah dan abaikan collider milik tubuh karakter sendiri
+        RaycastHit[] hits = Physics.RaycastAll(transform.position + Vector3.up * 0.5f, Vector3.down, 3f);
+        foreach (RaycastHit hit in hits)
+        {
+            if (hit.collider.transform == transform || hit.collider.transform.IsChildOf(transform))
+                continue;
+
+            if (hit.collider.GetComponentInParent<BoatController>() != null)
+                return true;
+        }
+        return false;
+    }
+
+    [ServerRpc]
+    private void FallOffBoatServerRpc()
+    {
+        NetworkObject.TryRemoveParent(true);
+        EnableGravityClientRpc();
+    }
+
+    [ClientRpc]
+    private void EnableGravityClientRpc()
+    {
+        rb.isKinematic = false;
+        rb.interpolation = RigidbodyInterpolation.Interpolate;
     }
 }
