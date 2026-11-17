@@ -48,7 +48,6 @@ public class LassoController : NetworkBehaviour
         // SAAT DILEPAS: Putus laso
         else if (Mouse.current != null && Mouse.current.leftButton.wasReleasedThisFrame)
         {
-            // Cek apakah tombol dilepas saat laso sedang aktif
             if (isLassoActive.Value)
             {
                 StopLassoServerRpc();
@@ -69,32 +68,35 @@ public class LassoController : NetworkBehaviour
             {
                 // Putar karakter menghadap batu
                 Vector3 lookDir = hit.point - transform.position;
-                lookDir.y = 0;
-                transform.rotation = Quaternion.LookRotation(lookDir);
+                lookDir.y = 0f;
+                if (lookDir.sqrMagnitude > 0.001f)
+                {
+                    transform.rotation = Quaternion.LookRotation(lookDir);
+                }
 
-                // Beritahu server untuk mulai menarik SECARA TERUS MENERUS
-                StartLassoServerRpc(hit.collider.transform.position);
+                // Kirim posisi batu DAN posisi pemain saat ini ke Server
+                StartLassoServerRpc(hit.collider.transform.position, transform.position);
             }
         }
     }
 
     [ServerRpc]
-    private void StartLassoServerRpc(Vector3 target)
+    private void StartLassoServerRpc(Vector3 target, Vector3 pullerWorldPosition)
     {
         Debug.Log("[LASO SERVER] Telepon dari Client diterima, mulai menarik!");
         if (boatController == null)
         {
-            // Cari di parent terlebih dahulu, jika tidak ada cari langsung di scene
             boatController = GetComponentInParent<BoatController>();
             if (boatController == null) boatController = FindFirstObjectByType<BoatController>();
         }
 
-        // Aktifkan variabel jaringan (otomatis memperbarui visual di layar semua orang)
         isLassoActive.Value = true;
         lassoTargetPoint.Value = target;
 
-        // Nyalakan mesin penarik perahu
-        if (boatController != null) boatController.StartPull(target);
+        if (boatController != null)
+        {
+            boatController.StartPull(target, pullerWorldPosition);
+        }
     }
 
     [ServerRpc]
@@ -102,9 +104,16 @@ public class LassoController : NetworkBehaviour
     {
         Debug.Log("[LASO SERVER] Perintah berhenti diterima.");
         isLassoActive.Value = false;
-        if (boatController == null) boatController = transform.parent.GetComponent<BoatController>();
 
-        // Matikan mesin penarik perahu
-        if (boatController != null) boatController.StopPull();
+        if (boatController == null)
+        {
+            boatController = GetComponentInParent<BoatController>();
+            if (boatController == null) boatController = FindFirstObjectByType<BoatController>();
+        }
+
+        if (boatController != null)
+        {
+            boatController.StopPull();
+        }
     }
 }

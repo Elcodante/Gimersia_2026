@@ -14,7 +14,6 @@ public class PlayerMovement : NetworkBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
-        // Wajib None agar Rigidbody tidak menahan perubahan transform di Update
         rb.interpolation = RigidbodyInterpolation.None;
     }
 
@@ -23,13 +22,31 @@ public class PlayerMovement : NetworkBehaviour
         rb.isKinematic = true;
         rb.interpolation = RigidbodyInterpolation.None;
 
-        // Pengaman tambahan: Jika Server lupa melakukan parenting di GameSpawner, otomatis kaitkan ke kapal
-        if (IsServer && transform.parent == null)
+        BoatController boat = FindFirstObjectByType<BoatController>();
+
+        // PENTING: Matikan tabrakan fisik antara kapsul pemain dan collider kapal
+        // agar kapsul pemain yang kinematic tidak menahan/memutar kapal saat kapal bergerak.
+        if (boat != null)
         {
-            BoatController boat = FindFirstObjectByType<BoatController>();
-            if (boat != null)
+            IgnoreCollisionWithBoat(boat);
+
+            if (IsServer && transform.parent == null)
             {
                 NetworkObject.TrySetParent(boat.NetworkObject, true);
+            }
+        }
+    }
+
+    private void IgnoreCollisionWithBoat(BoatController boat)
+    {
+        Collider[] playerColliders = GetComponentsInChildren<Collider>();
+        Collider[] boatColliders = boat.GetComponentsInChildren<Collider>();
+
+        foreach (Collider pCol in playerColliders)
+        {
+            foreach (Collider bCol in boatColliders)
+            {
+                Physics.IgnoreCollision(pCol, bCol, true);
             }
         }
     }
@@ -77,10 +94,8 @@ public class PlayerMovement : NetworkBehaviour
 
     private void CheckIfStillOnBoat()
     {
-        // Hanya cek jika pemain masih berada di atas kapal
         if (isFallingOff || transform.parent == null) return;
 
-        // Jika di bawah kaki sudah tidak ada dek kapal, lepaskan dari kapal agar jatuh ke air
         if (!IsBoatBelow())
         {
             isFallingOff = true;
@@ -90,7 +105,7 @@ public class PlayerMovement : NetworkBehaviour
 
     private bool IsBoatBelow()
     {
-        // Tembakkan sinar 3 meter ke bawah dan abaikan collider milik tubuh karakter sendiri
+        // Physics.RaycastAll tetap mendeteksi collider kapal meskipun Physics.IgnoreCollision aktif
         RaycastHit[] hits = Physics.RaycastAll(transform.position + Vector3.up * 0.5f, Vector3.down, 3f);
         foreach (RaycastHit hit in hits)
         {
