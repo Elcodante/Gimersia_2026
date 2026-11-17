@@ -80,7 +80,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2345423145
+  GlobalObjectIdHash: 2076413232
   InScenePlacedSourceGlobalObjectIdHash: 2076413232
   m_InScenePlacedDisabledByDefault: 0
   DeferredDespawnTick: 0
@@ -171,7 +171,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BoatController
   ShowTopMostFoldoutHeaderGroup: 1
-  pullForceMultiplier: 15
+  maxPullSpeed: 6
+  acceleration: 2
+  rotationSmoothness: 1
+  stopDistance: 1.5
+  snapToFourSides: 1
 --- !u!1 &5212991395054335827
 GameObject:
   m_ObjectHideFlags: 0
