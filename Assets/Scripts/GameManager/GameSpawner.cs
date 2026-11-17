@@ -43,14 +43,15 @@ public class GameSpawner : NetworkBehaviour
         if (playerPrefab == null || spawnPoints.Length == 0) return;
 
         Transform spawnPoint = spawnPoints[spawnIndex % spawnPoints.Length];
-
         GameObject playerInstance = Instantiate(playerPrefab, spawnPoint.position, spawnPoint.rotation);
-        NetworkObject netObj = playerInstance.GetComponent<NetworkObject>();
 
+        NetworkObject netObj = playerInstance.GetComponent<NetworkObject>();
         netObj.SpawnAsPlayerObject(clientId, true);
 
-        // Gunakan parameter true (worldPositionStays = true) agar posisi tepat di SpawnPoint
-        // dan tidak melayang dua kali lipat dari tinggi kapal
-        netObj.TrySetParent(perahuNetworkObject, true);
+        // Kaitkan pemain sebagai child dari kapal dengan worldPositionStays = true
+        if (perahuNetworkObject != null)
+        {
+            netObj.TrySetParent(perahuNetworkObject, true);
+        }
     }
 }
