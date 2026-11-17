@@ -7,7 +7,7 @@ public class GameSpawner : NetworkBehaviour
     [Header("Pengaturan Spawn")]
     [SerializeField] private GameObject playerPrefab;
     [SerializeField] private Transform[] spawnPoints;
-
+    [SerializeField] private NetworkObject perahuNetworkObject;
     public override void OnNetworkSpawn()
     {
         if (IsServer)
@@ -45,6 +45,12 @@ public class GameSpawner : NetworkBehaviour
         Transform spawnPoint = spawnPoints[spawnIndex % spawnPoints.Length];
 
         GameObject playerInstance = Instantiate(playerPrefab, spawnPoint.position, spawnPoint.rotation);
-        playerInstance.GetComponent<NetworkObject>().SpawnAsPlayerObject(clientId, true);
+        NetworkObject netObj = playerInstance.GetComponent<NetworkObject>();
+
+        netObj.SpawnAsPlayerObject(clientId, true);
+
+        // Gunakan parameter true (worldPositionStays = true) agar posisi tepat di SpawnPoint
+        // dan tidak melayang dua kali lipat dari tinggi kapal
+        netObj.TrySetParent(perahuNetworkObject, true);
     }
 }
