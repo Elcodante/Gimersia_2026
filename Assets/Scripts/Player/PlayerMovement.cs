@@ -10,6 +10,7 @@ public class PlayerMovement : NetworkBehaviour
 
     private Rigidbody rb;
     private bool isFallingOff = false;
+    private bool isMovementLocked = false; // Dikontrol oleh LassoController
 
     private void Awake()
     {
@@ -24,8 +25,6 @@ public class PlayerMovement : NetworkBehaviour
 
         BoatController boat = FindFirstObjectByType<BoatController>();
 
-        // PENTING: Matikan tabrakan fisik antara kapsul pemain dan collider kapal
-        // agar kapsul pemain yang kinematic tidak menahan/memutar kapal saat kapal bergerak.
         if (boat != null)
         {
             IgnoreCollisionWithBoat(boat);
@@ -35,6 +34,11 @@ public class PlayerMovement : NetworkBehaviour
                 NetworkObject.TrySetParent(boat.NetworkObject, true);
             }
         }
+    }
+
+    public void SetMovementLocked(bool locked)
+    {
+        isMovementLocked = locked;
     }
 
     private void IgnoreCollisionWithBoat(BoatController boat)
@@ -55,7 +59,12 @@ public class PlayerMovement : NetworkBehaviour
     {
         if (!IsSpawned || !IsOwner || !Application.isFocused) return;
 
-        HandleMovement();
+        // Cegah input jalan WASD saat sedang membidik, melempar, menarik, atau menunggu laso kembali
+        if (!isMovementLocked)
+        {
+            HandleMovement();
+        }
+
         CheckIfStillOnBoat();
     }
 
@@ -78,7 +87,6 @@ public class PlayerMovement : NetworkBehaviour
         {
             if (transform.parent != null)
             {
-                // Ubah arah gerak layar (World) menjadi arah lokal kapal
                 Vector3 localMoveDir = transform.parent.InverseTransformDirection(worldMoveDir);
                 transform.localPosition += localMoveDir * moveSpeed * Time.deltaTime;
             }
@@ -105,7 +113,6 @@ public class PlayerMovement : NetworkBehaviour
 
     private bool IsBoatBelow()
     {
-        // Physics.RaycastAll tetap mendeteksi collider kapal meskipun Physics.IgnoreCollision aktif
         RaycastHit[] hits = Physics.RaycastAll(transform.position + Vector3.up * 0.5f, Vector3.down, 3f);
         foreach (RaycastHit hit in hits)
         {

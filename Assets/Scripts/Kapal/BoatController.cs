@@ -3,43 +3,45 @@ using UnityEngine;
 
 public class BoatController : NetworkBehaviour
 {
-    [Header("Pengaturan Tarikan & Rotasi")]
-    [SerializeField] private float maxPullSpeed = 6f; // Kecepatan maksimum saat kapal sudah terseret penuh
-    [SerializeField] private float acceleration = 2f; // Seberapa cepat kapal mencapai maxPullSpeed
-    [SerializeField] private float rotationSmoothness = 4f; // Ayunan putaran kapal (semakin kecil = semakin berat/lambat)
+    [Header("Pengaturan Tarikan (Tap Space) & Rotasi")]
+    [SerializeField] private float tugSpeedBoost = 2.0f;     // Tambahan kecepatan setiap 1x tekan Space
+    [SerializeField] private float maxPullSpeed = 6.5f;      // Batas kecepatan maksimal kapal
+    [SerializeField] private float waterDrag = 3.5f;         // Hambatan air (semakin besar = kapal makin cepat melambat jika berhenti tekan F)
+    [SerializeField] private float rotationSmoothness = 5f;  // Kecepatan ayunan lambung kapal menghadap batu
     [SerializeField] private float stopDistance = 1.5f;
 
     [Tooltip("Jika aktif, arah hadap dikunci rapi ke 4 sisi kapal (Depan, Belakang, Kiri, Kanan).")]
     [SerializeField] private bool snapToFourSides = true;
 
     private Rigidbody rb;
-    private bool isPulled = false;
     private Vector3 pullTarget;
     private Vector3 localPullDir = Vector3.forward;
-
-    // Variabel untuk meniru inersia kapal di air
     private float currentSpeed = 0f;
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
 
-        // Kunci posisi Y dan rotasi X, Z secara absolut di mesin fisika
         rb.constraints = RigidbodyConstraints.FreezePositionY |
                          RigidbodyConstraints.FreezeRotationX |
                          RigidbodyConstraints.FreezeRotationZ;
     }
 
-    public void StartPull(Vector3 target, Vector3 pullerWorldPos)
+    /// <summary>
+    /// Dipanggil oleh Server setiap kali pemain menekan tombol F saat laso terkait di batu.
+    /// </summary>
+    public void TugBoat(Vector3 target, Vector3 pullerWorldPos)
     {
-        if (!IsServer) return;
+        if (!IsServer || !IsSpawned) return;
+
+        Vector3 toTarget = target - transform.position;
+        toTarget.y = 0f;
+
+        if (toTarget.magnitude <= stopDistance) return;
 
         pullTarget = target;
-        isPulled = true;
 
-        // Mulai dari 0 agar kapal "terasa berat" di awal tarikan dan fokus berputar dulu
-        currentSpeed = 0f;
-
+        // Tentukan sisi kapal tempat pemain menarik agar sisi tersebut berputar menghadap batu
         Vector3 localPos = transform.InverseTransformPoint(pullerWorldPos);
         localPos.y = 0f;
 
@@ -57,62 +59,79 @@ public class BoatController : NetworkBehaviour
                 localPullDir = localPos.normalized;
             }
         }
-        else
-        {
-            localPullDir = Vector3.forward;
-        }
 
-        rb.angularVelocity = Vector3.zero;
+        // Suntikkan lonjakan kecepatan tarikan (dibatasi maksimal maxPullSpeed)
+        currentSpeed = Mathf.Min(currentSpeed + tugSpeedBoost, maxPullSpeed);
     }
 
+    /// <summary>
+    /// Dipanggil saat laso dilepas. Kecepatan sisa akan melambat alami oleh waterDrag.
+    /// </summary>
     public void StopPull()
     {
         if (!IsServer) return;
-        isPulled = false;
-        currentSpeed = 0f;
-
-        rb.linearVelocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
+        if (!rb.isKinematic)
+        {
+            rb.angularVelocity = Vector3.zero;
+        }
     }
 
     private void FixedUpdate()
     {
-        if (!IsServer) return;
+        if (!IsServer || !IsSpawned) return;
 
-        // Cegah tabrakan fisik mengubah arah rotasi secara tak terduga
-        rb.angularVelocity = Vector3.zero;
-
-        if (!isPulled) return;
-
-        Vector3 toTarget = pullTarget - transform.position;
-        toTarget.y = 0f;
-        float distance = toTarget.magnitude;
-
-        if (distance <= stopDistance)
+        if (!rb.isKinematic)
         {
-            rb.linearVelocity = Vector3.zero;
-            return;
+            rb.angularVelocity = Vector3.zero;
         }
 
-        Vector3 directionToRock = toTarget.normalized;
-
-        // 1. TRANSLASI: Akselerasi Maju (Lerp)
-        // Kecepatan akan perlahan naik dari 0 menuju maxPullSpeed.
-        // Hasilnya: Di awal klik, kapal seolah tertahan air (bergerak pelan) sambil memutar badannya.
-        currentSpeed = Mathf.Lerp(currentSpeed, maxPullSpeed, Time.fixedDeltaTime * acceleration);
-        rb.linearVelocity = directionToRock * currentSpeed;
-
-        // 2. ROTASI: Ayunan Alami Air (Slerp)
-        if (localPullDir.sqrMagnitude > 0.001f)
+        if (currentSpeed > 0.02f)
         {
-            Quaternion forwardToRock = Quaternion.LookRotation(directionToRock, Vector3.up);
-            float angleOffset = Vector3.SignedAngle(localPullDir, Vector3.forward, Vector3.up);
-            Quaternion targetRotation = forwardToRock * Quaternion.Euler(0f, angleOffset, 0f);
+            Vector3 toTarget = pullTarget - transform.position;
+            toTarget.y = 0f;
 
-            // Slerp (Spherical Linear Interpolation) bergerak cepat di awal lalu melambat secara eksponensial di akhir.
-            // Ini sangat identik dengan gaya gesek benda di air (berayun memutar, lalu stabil/mengerem saat sudah sejajar).
-            Quaternion nextRotation = Quaternion.Slerp(rb.rotation, targetRotation, rotationSmoothness * Time.fixedDeltaTime);
-            rb.MoveRotation(nextRotation);
+            // Hentikan laju jika kapal sudah merapat ke batu
+            if (toTarget.magnitude <= stopDistance)
+            {
+                currentSpeed = 0f;
+                if (!rb.isKinematic) rb.linearVelocity = Vector3.zero;
+                return;
+            }
+
+            Vector3 directionToRock = toTarget.normalized;
+
+            // 1. TRANSLASI: Gerakkan kapal sesuai momentum tarikan saat ini
+            if (!rb.isKinematic)
+            {
+                rb.linearVelocity = directionToRock * currentSpeed;
+            }
+
+            // 2. ROTASI: Ayunkan sisi kapal menghadap batu sebanding dengan kecepatan tarikan
+            if (localPullDir.sqrMagnitude > 0.001f)
+            {
+                Quaternion forwardToRock = Quaternion.LookRotation(directionToRock, Vector3.up);
+                float angleOffset = Vector3.SignedAngle(localPullDir, Vector3.forward, Vector3.up);
+                Quaternion targetRotation = forwardToRock * Quaternion.Euler(0f, angleOffset, 0f);
+
+                float speedRatio = Mathf.Clamp01(currentSpeed / maxPullSpeed);
+                Quaternion nextRotation = Quaternion.Slerp(
+                    rb.rotation,
+                    targetRotation,
+                    rotationSmoothness * speedRatio * Time.fixedDeltaTime
+                );
+                rb.MoveRotation(nextRotation);
+            }
+
+            // 3. HAMBATAN AIR: Perlambat kecepatan secara bertahap sampai pemain menekan F lagi
+            currentSpeed = Mathf.Lerp(currentSpeed, 0f, waterDrag * Time.fixedDeltaTime);
+        }
+        else
+        {
+            currentSpeed = 0f;
+            if (!rb.isKinematic)
+            {
+                rb.linearVelocity = Vector3.zero;
+            }
         }
     }
 }
