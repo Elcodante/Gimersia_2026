@@ -20,16 +20,21 @@ public class LassoController : NetworkBehaviour
     [SerializeField] private float aimFollowSpeed = 8f;
     [SerializeField] private float catchRadius = 1.5f;
 
-    [Header("Pengaturan Tarikan (Tombol F)")]
-    [SerializeField] private float tugCooldown = 0.12f;
-    [SerializeField] private float slackSagHeight = 0.65f;
+    [Header("Pengaturan Tarikan Halus (Hold F)")]
+    [SerializeField] private float ropeShortenSpeed = 3.2f;      // Kecepatan pemendekan tali saat menarik
+    [SerializeField] private float trashTugInterval = 0.55f;     // Jeda tiap 1x getaran & hitungan cabut sampah
+
+    [Header("Pengaturan Kendur & Putus Tali")]
+    [SerializeField] private Key slackKey = Key.G;
+    [SerializeField] private float slackExtendSpeed = 4.0f;
+    [SerializeField] private float maxRopeLength = 28.0f;
+    [SerializeField] private float slackSagMultiplier = 0.45f;
 
     [Header("Pengaturan Visual Parabola & Durasi")]
     [SerializeField] private int arcSegments = 20;
     [SerializeField] private float maxArcHeight = 3.5f;
     [SerializeField] private float throwDuration = 0.2f;
     [SerializeField] private float retractDuration = 0.45f;
-    [SerializeField] private float autoReleaseDistance = 1.8f;
 
     private LineRenderer lineRenderer;
     private BoatController boatController;
@@ -37,14 +42,22 @@ public class LassoController : NetworkBehaviour
 
     private bool isLocalAiming = false;
     private Vector3 delayedAimPoint;
-    private float lastLocalTugTime = -10f;
+    private bool lastSentPullHeld = false;
+    private bool lastSentSlackHeld = false;
 
     private Transform latchedRockTransform;
+    private Collider latchedRockCollider;
     private TrashObstacle latchedTrash;
+    private Collider latchedTrashCollider;
+
+    private bool serverPullHeld = false;
+    private bool serverSlackHeld = false;
+    private float trashTugTimer = 0f;
 
     private NetworkVariable<LassoState> netState = new NetworkVariable<LassoState>(LassoState.Idle);
     private NetworkVariable<Vector3> netTargetPoint = new NetworkVariable<Vector3>();
     private NetworkVariable<float> netProgress = new NetworkVariable<float>(0f);
+    private NetworkVariable<float> netRopeLength = new NetworkVariable<float>(0f);
     private NetworkVariable<float> netRopeTension = new NetworkVariable<float>(0f);
 
     private Coroutine serverSequenceCoroutine;
@@ -62,17 +75,20 @@ public class LassoController : NetworkBehaviour
         if (boatController == null) boatController = FindFirstObjectByType<BoatController>();
     }
 
+    public override void OnNetworkDespawn()
+    {
+        if (IsServer && boatController != null)
+        {
+            boatController.ClearPlayerInputs(OwnerClientId);
+        }
+    }
+
     private void Update()
     {
         if (IsOwner && Application.isFocused)
         {
             HandleOwnerInput();
             UpdateMovementLock();
-        }
-
-        if (IsServer && netState.Value == LassoState.Pulling && netRopeTension.Value > 0f)
-        {
-            netRopeTension.Value = Mathf.MoveTowards(netRopeTension.Value, 0f, 3f * Time.deltaTime);
         }
 
         UpdateRopeVisuals();
@@ -82,7 +98,6 @@ public class LassoController : NetworkBehaviour
     {
         LassoState currentState = netState.Value;
 
-        // 1. MULAI MODE AIM
         if (currentState == LassoState.Idle && !isLocalAiming)
         {
             if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
@@ -92,7 +107,6 @@ public class LassoController : NetworkBehaviour
             }
         }
 
-        // 2. PROSES MODE AIM & LEMPAR
         if (isLocalAiming)
         {
             if (Mouse.current != null && Mouse.current.leftButton.isPressed)
@@ -117,21 +131,27 @@ public class LassoController : NetworkBehaviour
                 ThrowLassoServerRpc(delayedAimPoint);
             }
         }
-        // 3. MODE TERKAIT: Tekan F berkali-kali untuk menarik kapal ke Batu atau mencabut Sampah
         else if (currentState == LassoState.Pulling)
         {
-            if (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame)
+            bool pullHeld = Keyboard.current != null && Keyboard.current.fKey.isPressed;
+            bool slackHeld = Keyboard.current != null && Keyboard.current[slackKey].isPressed;
+
+            if (pullHeld != lastSentPullHeld || slackHeld != lastSentSlackHeld)
             {
-                if (Time.time - lastLocalTugTime >= tugCooldown)
-                {
-                    lastLocalTugTime = Time.time;
-                    TugLassoServerRpc(transform.position);
-                }
+                lastSentPullHeld = pullHeld;
+                lastSentSlackHeld = slackHeld;
+                UpdatePullInputServerRpc(pullHeld, slackHeld);
             }
-            else if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
+
+            if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
             {
                 ReleaseLassoServerRpc();
             }
+        }
+        else
+        {
+            lastSentPullHeld = false;
+            lastSentSlackHeld = false;
         }
     }
 
@@ -192,8 +212,13 @@ public class LassoController : NetworkBehaviour
 
             case LassoState.Pulling:
                 lineRenderer.enabled = true;
-                float currentSag = Mathf.Lerp(-slackSagHeight, 0f, netRopeTension.Value);
-                DrawParabola(ropeOrigin, netTargetPoint.Value, 1f, currentSag);
+                float actualDist = FlatDistance(transform.position, netTargetPoint.Value);
+
+                float extraSlack = Mathf.Max(0f, netRopeLength.Value - actualDist);
+                float baseSag = Mathf.Clamp(extraSlack * slackSagMultiplier, 0f, 3.0f);
+
+                float finalSag = Mathf.Lerp(-baseSag - 0.2f, 0f, netRopeTension.Value);
+                DrawParabola(ropeOrigin, netTargetPoint.Value, 1f, finalSag);
                 break;
 
             case LassoState.Retracting:
@@ -231,9 +256,15 @@ public class LassoController : NetworkBehaviour
         serverSequenceCoroutine = StartCoroutine(ServerLassoRoutine(landingPoint));
     }
 
+    [ServerRpc]
+    private void UpdatePullInputServerRpc(bool pullHeld, bool slackHeld)
+    {
+        serverPullHeld = pullHeld;
+        serverSlackHeld = slackHeld;
+    }
+
     private IEnumerator ServerLassoRoutine(Vector3 landingPoint)
     {
-        // 1. FASE MELEMPAR
         netTargetPoint.Value = landingPoint;
         netProgress.Value = 0f;
         netState.Value = LassoState.Throwing;
@@ -247,52 +278,150 @@ public class LassoController : NetworkBehaviour
         }
         netProgress.Value = 1f;
 
-        // 2. CEK PENDARATAN PADA BATU ATAU SAMPAH
         Collider hitTarget = FindTargetAtPoint(landingPoint);
 
         if (hitTarget != null)
         {
             latchedTrash = hitTarget.GetComponentInParent<TrashObstacle>();
-            latchedRockTransform = (latchedTrash == null) ? hitTarget.transform : null;
+            latchedTrashCollider = (latchedTrash != null) ? hitTarget : null;
 
-            netTargetPoint.Value = hitTarget.transform.position;
-            netRopeTension.Value = 0f;
+            latchedRockTransform = (latchedTrash == null) ? hitTarget.transform : null;
+            latchedRockCollider = (latchedTrash == null) ? hitTarget : null;
+
+            Vector3 targetPos = hitTarget.transform.position;
+            netTargetPoint.Value = targetPos;
+
+            float initialDist = FlatDistance(transform.position, targetPos);
+            netRopeLength.Value = Mathf.Clamp(initialDist, 0.5f, maxRopeLength - 0.5f);
+            netRopeTension.Value = 0.2f;
+
+            serverPullHeld = false;
+            serverSlackHeld = false;
+            trashTugTimer = 0f;
             netState.Value = LassoState.Pulling;
 
             while (netState.Value == LassoState.Pulling)
             {
-                // CABANG A: Target adalah SAMPAH (diam di dasar sungai, lepas hanya jika sampah sudah hilang)
-                if (latchedTrash != null)
-                {
-                    if (!latchedTrash.IsSpawned || latchedTrash.IsCleared)
-                    {
-                        StopPullAndReset();
-                        yield break;
-                    }
-                }
-                // CABANG B: Target adalah BATU (otomatis lepas jika kapal sudah merapat ke batu)
-                else if (latchedRockTransform != null)
-                {
-                    if (boatController == null) boatController = FindFirstObjectByType<BoatController>();
+                if (boatController == null) boatController = FindFirstObjectByType<BoatController>();
 
+                if (latchedTrash != null && (!latchedTrash.IsSpawned || latchedTrash.IsCleared))
+                {
+                    StopPullAndReset(false);
+                    yield break;
+                }
+                if (latchedTrash == null && latchedRockTransform == null)
+                {
+                    StopPullAndReset(false);
+                    yield break;
+                }
+
+                Vector3 activeTargetPos = (latchedTrash != null)
+                    ? latchedTrash.transform.position
+                    : latchedRockTransform.position;
+
+                Collider activeTargetCol = (latchedTrash != null)
+                    ? latchedTrashCollider
+                    : latchedRockCollider;
+
+                float actualDist = FlatDistance(transform.position, activeTargetPos);
+
+                if (serverPullHeld)
+                {
+                    // Jika target adalah BATU dan kapal sudah menyentuh batu target:
+                    // hentikan gaya tarik F, tetapi tali tetap menancap di batu.
+                    if (latchedRockTransform != null && boatController != null &&
+                        boatController.IsTouchingOrAtSurface(latchedRockCollider, activeTargetPos))
+                    {
+                        boatController.SetPlayerPull(OwnerClientId, false, activeTargetPos, transform.position, activeTargetCol);
+                        boatController.SetPlayerTether(OwnerClientId, false, activeTargetPos, transform.position, netRopeLength.Value);
+                        netRopeLength.Value = Mathf.Max(netRopeLength.Value, actualDist);
+                        netRopeTension.Value = Mathf.MoveTowards(netRopeTension.Value, 0f, 3f * Time.deltaTime);
+                        yield return null;
+                        continue;
+                    }
+
+                    // Tarikan halus & kontinu ke BoatController
                     if (boatController != null)
                     {
-                        Vector3 flatBoatPos = boatController.transform.position;
-                        Vector3 flatRockPos = latchedRockTransform.position;
-                        flatBoatPos.y = 0f;
-                        flatRockPos.y = 0f;
+                        boatController.SetPlayerTether(OwnerClientId, false, activeTargetPos, transform.position, netRopeLength.Value);
+                        boatController.SetPlayerPull(OwnerClientId, true, activeTargetPos, transform.position, activeTargetCol);
+                    }
 
-                        if (Vector3.Distance(flatBoatPos, flatRockPos) <= autoReleaseDistance)
+                    // Pendekkan tali secara mulus mengikuti laju kapal
+                    netRopeLength.Value = Mathf.Max(
+                        0.5f,
+                        Mathf.Min(netRopeLength.Value, actualDist) - ropeShortenSpeed * Time.deltaTime
+                    );
+
+                    // Ketegangan visual tali mengikuti irama tarikan lembut
+                    float targetTension = 0.85f + 0.15f * Mathf.Sin(Time.time * 5f);
+                    netRopeTension.Value = Mathf.MoveTowards(netRopeTension.Value, targetTension, 4f * Time.deltaTime);
+
+                    // Jika target adalah SAMPAH, tetap hitung getaran & cabutan tiap interval
+                    if (latchedTrash != null)
+                    {
+                        trashTugTimer -= Time.deltaTime;
+                        if (trashTugTimer <= 0f)
                         {
-                            StopPullAndReset();
-                            yield break;
+                            trashTugTimer = trashTugInterval;
+                            latchedTrash.TugTrash();
+
+                            if (latchedTrash.IsCleared)
+                            {
+                                StopPullAndReset(false);
+                                yield break;
+                            }
                         }
+                    }
+                }
+                else if (serverSlackHeld)
+                {
+                    trashTugTimer = 0f;
+                    if (boatController != null)
+                    {
+                        boatController.SetPlayerPull(OwnerClientId, false, activeTargetPos, transform.position, activeTargetCol);
+                        boatController.SetPlayerTether(OwnerClientId, false, activeTargetPos, transform.position, netRopeLength.Value);
+                    }
+
+                    netRopeLength.Value += slackExtendSpeed * Time.deltaTime;
+                    netRopeTension.Value = Mathf.MoveTowards(netRopeTension.Value, 0f, 4f * Time.deltaTime);
+
+                    if (netRopeLength.Value >= maxRopeLength)
+                    {
+                        StopPullAndReset(true);
+                        yield break;
                     }
                 }
                 else
                 {
-                    StopPullAndReset();
-                    yield break;
+                    trashTugTimer = 0f;
+                    if (boatController != null)
+                    {
+                        boatController.SetPlayerPull(OwnerClientId, false, activeTargetPos, transform.position, activeTargetCol);
+                    }
+
+                    if (actualDist >= maxRopeLength)
+                    {
+                        StopPullAndReset(true);
+                        yield break;
+                    }
+
+                    if (actualDist > netRopeLength.Value + 0.05f)
+                    {
+                        netRopeTension.Value = Mathf.MoveTowards(netRopeTension.Value, 1f, 5f * Time.deltaTime);
+                        if (boatController != null)
+                        {
+                            boatController.SetPlayerTether(OwnerClientId, true, activeTargetPos, transform.position, netRopeLength.Value);
+                        }
+                    }
+                    else
+                    {
+                        netRopeTension.Value = Mathf.MoveTowards(netRopeTension.Value, 0f, 3f * Time.deltaTime);
+                        if (boatController != null)
+                        {
+                            boatController.SetPlayerTether(OwnerClientId, false, activeTargetPos, transform.position, netRopeLength.Value);
+                        }
+                    }
                 }
 
                 yield return null;
@@ -300,51 +429,25 @@ public class LassoController : NetworkBehaviour
         }
         else
         {
-            // MELESET -> Tarik tali kembali
-            netState.Value = LassoState.Retracting;
-
-            float retractElapsed = 0f;
-            while (retractElapsed < retractDuration)
-            {
-                retractElapsed += Time.deltaTime;
-                netProgress.Value = 1f - Mathf.Clamp01(retractElapsed / retractDuration);
-                yield return null;
-            }
-
-            netProgress.Value = 0f;
-            netState.Value = LassoState.Idle;
+            yield return RetractRopeRoutine();
         }
     }
 
-    [ServerRpc]
-    private void TugLassoServerRpc(Vector3 pullerWorldPos)
+    private IEnumerator RetractRopeRoutine()
     {
-        if (netState.Value != LassoState.Pulling) return;
+        netState.Value = LassoState.Retracting;
 
-        netRopeTension.Value = 1f;
-
-        if (boatController == null) boatController = FindFirstObjectByType<BoatController>();
-
-        // Jika terkait pada SAMPAH -> getarkan sampah & tarik kapal mendekati sampah
-        if (latchedTrash != null)
+        float retractElapsed = 0f;
+        while (retractElapsed < retractDuration)
         {
-            Vector3 trashPos = latchedTrash.transform.position;
-            latchedTrash.TugTrash();
+            retractElapsed += Time.deltaTime;
+            netProgress.Value = 1f - Mathf.Clamp01(retractElapsed / retractDuration);
+            yield return null;
+        }
 
-            if (latchedTrash.IsCleared)
-            {
-                StopPullAndReset();
-            }
-            else if (boatController != null)
-            {
-                boatController.TugBoat(trashPos, pullerWorldPos);
-            }
-        }
-        // Jika terkait pada BATU -> tarik kapal mendekati batu
-        else if (latchedRockTransform != null && boatController != null)
-        {
-            boatController.TugBoat(latchedRockTransform.position, pullerWorldPos);
-        }
+        netProgress.Value = 0f;
+        netState.Value = LassoState.Idle;
+        serverSequenceCoroutine = null;
     }
 
     private Collider FindTargetAtPoint(Vector3 point)
@@ -373,11 +476,11 @@ public class LassoController : NetworkBehaviour
     {
         if (netState.Value == LassoState.Pulling)
         {
-            StopPullAndReset();
+            StopPullAndReset(true);
         }
     }
 
-    private void StopPullAndReset()
+    private void StopPullAndReset(bool playRetractAnimation)
     {
         if (serverSequenceCoroutine != null)
         {
@@ -388,13 +491,32 @@ public class LassoController : NetworkBehaviour
         if (boatController == null) boatController = FindFirstObjectByType<BoatController>();
         if (boatController != null)
         {
-            boatController.StopPull();
+            boatController.ClearPlayerInputs(OwnerClientId);
         }
 
         latchedTrash = null;
+        latchedTrashCollider = null;
         latchedRockTransform = null;
+        latchedRockCollider = null;
+        serverPullHeld = false;
+        serverSlackHeld = false;
         netRopeTension.Value = 0f;
-        netProgress.Value = 0f;
-        netState.Value = LassoState.Idle;
+
+        if (playRetractAnimation)
+        {
+            serverSequenceCoroutine = StartCoroutine(RetractRopeRoutine());
+        }
+        else
+        {
+            netProgress.Value = 0f;
+            netState.Value = LassoState.Idle;
+        }
+    }
+
+    private float FlatDistance(Vector3 a, Vector3 b)
+    {
+        a.y = 0f;
+        b.y = 0f;
+        return Vector3.Distance(a, b);
     }
 }

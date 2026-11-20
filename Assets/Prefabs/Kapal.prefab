@@ -51,7 +51,7 @@ Rigidbody:
   serializedVersion: 5
   m_Mass: 10
   m_LinearDamping: 3
-  m_AngularDamping: 0.05
+  m_AngularDamping: 3.5
   m_CenterOfMass: {x: 0, y: 0, z: 0}
   m_InertiaTensor: {x: 1, y: 1, z: 1}
   m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
@@ -66,8 +66,8 @@ Rigidbody:
   m_UseGravity: 1
   m_IsKinematic: 0
   m_Interpolate: 0
-  m_Constraints: 116
-  m_CollisionDetection: 0
+  m_Constraints: 84
+  m_CollisionDetection: 2
 --- !u!114 &7234689327663567930
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -80,14 +80,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2076413232
+  GlobalObjectIdHash: 2345423145
   InScenePlacedSourceGlobalObjectIdHash: 2076413232
   m_InScenePlacedDisabledByDefault: 0
   DeferredDespawnTick: 0
   Ownership: 1
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
-  m_InScenePlaced: 1
+  m_InScenePlaced: 0
   ActiveSceneSynchronization: 0
   SceneMigrationSynchronization: 0
   SpawnWithObservers: 1
@@ -171,11 +171,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BoatController
   ShowTopMostFoldoutHeaderGroup: 1
+  pullAcceleration: 8
   maxPullSpeed: 6
-  acceleration: 2
-  rotationSmoothness: 1
-  stopDistance: 1.5
+  pullRampUpTime: 0.65
+  cadenceFrequency: 0.85
+  cadenceDepth: 0.22
+  turnResponsiveness: 1.6
+  maxTurnSpeedRad: 1.5
+  turnTorqueGain: 4.5
   snapToFourSides: 1
+  stopSurfaceDistance: 0.2
+  obstacleSlideBlend: 0.9
+  obstaclePushOutAccel: 4
+  tetherStiffness: 14
 --- !u!1 &5212991395054335827
 GameObject:
   m_ObjectHideFlags: 0
@@ -305,7 +313,7 @@ BoxCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5276203265409724055}
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 13400000, guid: 8cb98e7906ec54145a26aeb5a6db882f, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
