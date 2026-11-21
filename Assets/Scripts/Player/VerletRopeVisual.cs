@@ -24,10 +24,9 @@ public class VerletRopeVisual : MonoBehaviour
     [SerializeField] private float radius = 0.05f;
     [SerializeField, Range(3, 12)] private int radialSegments = 6;
     [Tooltip("Panjang (meter) satu ulangan tekstur tali.")]
-    [SerializeField] private float uvTileLength = 0.4f;
-    [Tooltip("Kosong = dibuat material coklat sederhana (URP Lit). Isi dengan material tali kamu agar tampil bagus di build.")]
+    [SerializeField] private float uvTileLength = 0.45f;
+    [Tooltip("Kosong = otomatis memakai material tali buatan kode (RopeMaterialFactory). Atau buat asset lewat menu Tools > River Game > Create Rope Material.")]
     [SerializeField] private Material ropeMaterial;
-    [SerializeField] private Color fallbackColor = new Color(0.55f, 0.40f, 0.22f);
 
     [Header("Kait / Ujung Tali (opsional)")]
     [Tooltip("Prefab 3D yang dipasang di ujung tali (kait, batu pengait, simpul laso, dll).")]
@@ -44,7 +43,6 @@ public class VerletRopeVisual : MonoBehaviour
     private Vector3[] pos, prev;
     private Mesh mesh;
     private MeshRenderer meshRenderer;
-    private Material runtimeMaterial;
     private GameObject hookInstance;
 
     private Vector3[] verts, normals;
@@ -113,18 +111,7 @@ public class VerletRopeVisual : MonoBehaviour
 
         BuildStaticMeshData();
 
-        if (ropeMaterial == null)
-        {
-            Shader sh = Shader.Find("Universal Render Pipeline/Lit");
-            if (sh == null) sh = Shader.Find("Standard");
-            runtimeMaterial = new Material(sh) { name = "RopeFallback", color = fallbackColor };
-            if (runtimeMaterial.HasProperty("_BaseColor")) runtimeMaterial.SetColor("_BaseColor", fallbackColor);
-            meshRenderer.sharedMaterial = runtimeMaterial;
-        }
-        else
-        {
-            meshRenderer.sharedMaterial = ropeMaterial;
-        }
+        meshRenderer.sharedMaterial = (ropeMaterial != null) ? ropeMaterial : RopeMaterialFactory.GetSharedMaterial();
 
         if (hookPrefab != null)
         {
@@ -293,6 +280,5 @@ public class VerletRopeVisual : MonoBehaviour
     private void OnDestroy()
     {
         if (mesh != null) Destroy(mesh);
-        if (runtimeMaterial != null) Destroy(runtimeMaterial);
     }
 }

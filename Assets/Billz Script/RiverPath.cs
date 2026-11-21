@@ -46,14 +46,20 @@ public class RiverPath : MonoBehaviour
 
         Vector3 center = c.EvaluatePosition(t);
         Vector3 dir = c.EvaluateTangent(t);
-        dir.y = 0f; dir.Normalize();
+        dir.y = 0f;
+        // Pengaman: tangen spline bisa nol/NaN (knot berimpit, ujung spline) -> Normalize jadi NaN
+        if (float.IsNaN(dir.x) || float.IsNaN(dir.z) || dir.sqrMagnitude < 1e-8f) dir = Vector3.zero;
+        else dir.Normalize();
 
-        float half = WidthAt(t) * 0.5f;
+        // Pengaman: lebar 0/NaN membuat lateral / half = NaN
+        float w = WidthAt(t) * 0.5f;
+        float half = (w > 0.01f) ? w : 0.01f;
         Vector3 off = worldPos - center; off.y = 0f;
         float lateral = off.magnitude;
         float l01 = Mathf.Clamp01(lateral / half);
 
         float speed = flowSpeed * Mathf.Lerp(1f, edgeSpeedFactor, l01 * l01);
+        if (float.IsNaN(speed) || float.IsInfinity(speed)) speed = 0f;
 
         return new Sample { center = center, flowVelocity = dir * speed, lateral = lateral, halfWidth = half };
     }

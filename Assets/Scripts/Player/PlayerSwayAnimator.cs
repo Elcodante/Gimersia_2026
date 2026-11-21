@@ -44,6 +44,9 @@ public class PlayerSwayAnimator : MonoBehaviour
         public Quaternion rot;
     }
 
+    public Transform Body => body;
+    public Transform Head => head;
+
     private LocalPose bodyPose, headPose;
 
     private Vector2 bodyTilt, bodyTiltVel;

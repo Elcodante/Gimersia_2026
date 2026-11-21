@@ -133,7 +133,7 @@ MonoBehaviour:
   Ownership: 1
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
-  m_InScenePlaced: 1
+  m_InScenePlaced: 0
   ActiveSceneSynchronization: 0
   SceneMigrationSynchronization: 0
   SpawnWithObservers: 1
@@ -156,6 +156,18 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   minTugsRequired: 5
   maxTugsRequired: 7
+  driftWithRiver: 1
+  flowInfluence: 0.8
+  waterDrag: 2
+  mass: 4
+  useInitialHeight: 1
+  floatHeight: 0.1
+  buoyancySpring: 25
+  buoyancyDamping: 9
+  bobHeight: 0.04
+  bobSpeed: 1.5
+  clientSmoothTime: 0.1
+  despawnDistanceFromRiver: 40
   visualModel: {fileID: 0}
   shakeDuration: 0.22
   shakeMagnitude: 0.18

@@ -2006,6 +2006,11 @@ MonoBehaviour:
   wakeLength: 8
   pillowLength: 1.5
   pushRadius: 2
+  maxHeightAboveWater: 3
+  updateDynamicObstacles: 1
+  dynamicUpdateRate: 30
+  autoFindBoatAndTrash: 1
+  extraDynamicColliders: []
   waterMaterial: {fileID: 2100000, guid: 8b2d67bf64e29b841909bb0869a4b810, type: 2}
 --- !u!114 &1862450848
 MonoBehaviour:
@@ -2824,7 +2829,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7269289385548840250, guid: 904f73bfe958f0146aa78c992142a297, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 5.21
+      value: 5.35
       objectReference: {fileID: 0}
     - target: {fileID: 7269289385548840250, guid: 904f73bfe958f0146aa78c992142a297, type: 3}
       propertyPath: m_LocalPosition.z

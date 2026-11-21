@@ -45,6 +45,8 @@ public class BoatController : NetworkBehaviour
     [SerializeField] private bool driftWithRiver = true;
     [Tooltip("Seberapa kuat arus membawa kapal (dikali Flow Speed di RiverPath). Harus cukup kecil agar tarikan pemain masih bisa melawan arus.")]
     [SerializeField, Range(0f, 1.5f)] private float flowInfluence = 0.5f;
+    [Tooltip("Saat pemain menarik (F), seberapa besar arus dikurangi (0-1) supaya kapal langsung tertarik. 0 = arus tetap penuh.")]
+    [SerializeField, Range(0f, 1f)] private float pullFlowCancel = 0.75f;
     [Tooltip("Hambatan air relatif terhadap arus. 3 = sama dengan Linear Damping lama, jadi rasa tarikan tidak berubah.")]
     [SerializeField] private float waterDrag = 3f;
     [Tooltip("Lambung pelan-pelan menghadap searah aliran saat tidak ditarik / tidak menabrak.")]
@@ -401,7 +403,17 @@ public class BoatController : NetworkBehaviour
             s = river.SampleAt(transform.position);
             flow = s.flowVelocity * flowInfluence;
             flow.y = 0f;
+            if (!float.IsFinite(flow.x) || !float.IsFinite(flow.z)) flow = Vector3.zero;   // pengaman NaN
         }
+
+        // Selama ditarik, arus melemah mengikuti kekuatan tarikan -> kapal langsung maju, bukan baru bergerak setelah F dilepas
+        float pullWeight = 0f;
+        foreach (var kvp in activePulls)
+        {
+            pullWeight = Mathf.Max(pullWeight, kvp.Value.smoothWeight);
+        }
+        flow *= 1f - pullFlowCancel * pullWeight;
+
         currentFlow = flow;
 
         // Drag relatif air: v -> flow. Tanpa tarikan, kapal menyamai kecepatan arus.

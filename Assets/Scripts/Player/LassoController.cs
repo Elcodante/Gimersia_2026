@@ -21,7 +21,6 @@ public class LassoController : NetworkBehaviour
     [SerializeField] private float catchRadius = 1.5f;
 
     [Header("Pengaturan Tarikan Halus (Hold F)")]
-    [SerializeField] private float ropeShortenSpeed = 3.2f;      // Kecepatan pemendekan tali saat menarik
     [SerializeField] private float trashTugInterval = 0.55f;     // Jeda tiap 1x getaran & hitungan cabut sampah
 
     [Header("Pengaturan Kendur & Putus Tali")]
@@ -128,6 +127,13 @@ public class LassoController : NetworkBehaviour
 
     private void HandleOwnerInput()
     {
+        // Selama tenggelam / respawn, tidak ada input laso
+        if (playerMovement != null && playerMovement.IsRespawning)
+        {
+            isLocalAiming = false;
+            return;
+        }
+
         LassoState currentState = netState.Value;
 
         if (currentState == LassoState.Idle && !isLocalAiming)
@@ -413,6 +419,12 @@ public class LassoController : NetworkBehaviour
                     ? latchedTrashCollider
                     : latchedRockCollider;
 
+                // Sampah ikut hanyut: kirim posisi terbaru agar ujung tali di semua client ikut bergerak
+                if (latchedTrash != null && (netTargetPoint.Value - activeTargetPos).sqrMagnitude > 0.0004f)
+                {
+                    netTargetPoint.Value = activeTargetPos;
+                }
+
                 float actualDist = FlatDistance(transform.position, activeTargetPos);
 
                 // Kapal terseret terlalu jauh dari batu (mis. terbawa arus): tali putus/lepas di kondisi apa pun
@@ -444,11 +456,10 @@ public class LassoController : NetworkBehaviour
                         boatController.SetPlayerPull(OwnerClientId, true, activeTargetPos, transform.position, activeTargetCol);
                     }
 
-                    // Pendekkan tali secara mulus mengikuti laju kapal
-                    netRopeLength.Value = Mathf.Max(
-                        0.5f,
-                        Mathf.Min(netRopeLength.Value, actualDist) - ropeShortenSpeed * Time.deltaTime
-                    );
+                    // Panjang tali mengikuti jarak kapal yang SEBENARNYA (tidak memendek lebih cepat dari kapal).
+                    // Dulu tali memendek dengan kecepatan tetap, lebih cepat dari kapal, sehingga saat F dilepas
+                    // tali "terlalu pendek" dan menyentak kapal seperti boost.
+                    netRopeLength.Value = Mathf.Max(0.5f, Mathf.Min(netRopeLength.Value, actualDist));
 
                     // Ketegangan visual tali mengikuti irama tarikan lembut
                     float targetTension = 0.85f + 0.15f * Mathf.Sin(Time.time * 5f);
@@ -553,6 +564,13 @@ public class LassoController : NetworkBehaviour
             }
         }
         return closestTarget;
+    }
+
+    /// <summary>Dipanggil server (mis. saat pemain respawn) untuk melepas tali seketika.</summary>
+    public void ServerForceRelease()
+    {
+        if (!IsServer || netState.Value == LassoState.Idle) return;
+        StopPullAndReset(false);
     }
 
     [ServerRpc]

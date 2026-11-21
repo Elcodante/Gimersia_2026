@@ -175,7 +175,7 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   pullAcceleration: 8
   maxPullSpeed: 6
-  pullRampUpTime: 0.65
+  pullRampUpTime: 0.2
   cadenceFrequency: 0.85
   cadenceDepth: 0.22
   turnResponsiveness: 1.6
@@ -189,6 +189,7 @@ MonoBehaviour:
   river: {fileID: 0}
   driftWithRiver: 1
   flowInfluence: 0.5
+  pullFlowCancel: 0.75
   waterDrag: 3
   alignHeadingToFlow: 1
   headingOffsetDegrees: 0

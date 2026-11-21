@@ -256,7 +256,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 4146879840
+  GlobalObjectIdHash: 3477146151
   InScenePlacedSourceGlobalObjectIdHash: 4146879840
   m_InScenePlacedDisabledByDefault: 0
   DeferredDespawnTick: 0
@@ -359,6 +359,13 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   moveSpeed: 5
   rotationSpeed: 10
+  drownDepthBelowWater: 0.8
+  sinkDuration: 1
+  maxTimeOutsideBoat: 4
+  spawnPointPrefix: SpawnPoint
+  hiddenDuration: 0.6
+  appearDuration: 0.45
+  appearTargets: []
 --- !u!120 &8810716209018852192
 LineRenderer:
   serializedVersion: 3
@@ -485,7 +492,6 @@ MonoBehaviour:
   lassoRange: 15
   aimFollowSpeed: 8
   catchRadius: 1.5
-  ropeShortenSpeed: 3.2
   trashTugInterval: 0.55
   slackKey: 21
   slackExtendSpeed: 4
@@ -493,7 +499,7 @@ MonoBehaviour:
   slackSagMultiplier: 0.45
   useVerletRope: 1
   ropeVisual: {fileID: 0}
-  ropeMaterial: {fileID: 0}
+  ropeMaterial: {fileID: 2100000, guid: 14389aacf2cb34443b2847bfbacc6b15, type: 2}
   hookPrefab: {fileID: 0}
   handAnchor: {fileID: 0}
   arcSegments: 20
@@ -516,7 +522,7 @@ MonoBehaviour:
   head: {fileID: 8398499326561438117}
   feetPivot: {fileID: 0}
   feetLocalOffset: {x: 0, y: -1, z: 0}
-  maxTiltAngle: -12
+  maxTiltAngle: 12
   speedForMaxTilt: 5
   bodySmoothTime: 0.12
   invertTilt: 0
