@@ -104,22 +104,14 @@ public class PlayerMovement : NetworkBehaviour
 
     private void Update()
     {
-        if (!IsSpawned || !IsOwner) return;
+        if (!IsSpawned || !IsOwner || !Application.isFocused) return;
 
-        // Cegah input jalan WASD saat sedang membidik, melempar, menarik, menunggu laso kembali, atau respawn
-        if (Application.isFocused && !isMovementLocked && !respawnLocked)
+        if (!isMovementLocked && !InGameMenuUI.ShouldLockMovement)
         {
             HandleMovement();
         }
 
-        if (respawnLocked) return;
-
         CheckIfStillOnBoat();
-
-        if (isFallingOff)
-        {
-            CheckDrowning();
-        }
     }
 
     private void HandleMovement()

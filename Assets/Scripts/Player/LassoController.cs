@@ -127,6 +127,22 @@ public class LassoController : NetworkBehaviour
 
     private void HandleOwnerInput()
     {
+        if (InGameMenuUI.IsMenuOpen)
+        {
+            if (isLocalAiming)
+            {
+                isLocalAiming = false;
+            }
+
+            if (lastSentPullHeld || lastSentSlackHeld)
+            {
+                lastSentPullHeld = false;
+                lastSentSlackHeld = false;
+                UpdatePullInputServerRpc(false, false);
+            }
+            return;
+        }
+
         // Selama tenggelam / respawn, tidak ada input laso
         if (playerMovement != null && playerMovement.IsRespawning)
         {
