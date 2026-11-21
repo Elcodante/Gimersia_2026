@@ -39,6 +39,28 @@ public class BoatController : NetworkBehaviour
     [SerializeField] private float obstaclePushOutAccel = 4.0f;  // Dorongan halus keluar dari permukaan batu penghalang
     [SerializeField] private float tetherStiffness = 14.0f;      // Kekuatan tahan tali saat dikunci (tanpa teleportasi MovePosition)
 
+    [Header("Arus Sungai (Spline)")]
+    [Tooltip("Kosong = dicari otomatis di scene (RiverPath).")]
+    [SerializeField] private RiverPath river;
+    [SerializeField] private bool driftWithRiver = true;
+    [Tooltip("Seberapa kuat arus membawa kapal (dikali Flow Speed di RiverPath). Harus cukup kecil agar tarikan pemain masih bisa melawan arus.")]
+    [SerializeField, Range(0f, 1.5f)] private float flowInfluence = 0.5f;
+    [Tooltip("Hambatan air relatif terhadap arus. 3 = sama dengan Linear Damping lama, jadi rasa tarikan tidak berubah.")]
+    [SerializeField] private float waterDrag = 3f;
+    [Tooltip("Lambung pelan-pelan menghadap searah aliran saat tidak ditarik / tidak menabrak.")]
+    [SerializeField] private bool alignHeadingToFlow = true;
+    [SerializeField] private float headingOffsetDegrees = 0f;
+    [SerializeField] private float flowAlignResponsiveness = 0.6f;
+    [SerializeField] private float flowAlignMaxTurnRad = 0.5f;
+    [Tooltip("Jaring pengaman: dorong lembut ke tengah sungai jika mendekati tepi (matikan jika tepi sungai sudah punya collider).")]
+    [SerializeField] private bool keepInsideBanks = false;
+    [SerializeField] private float bankMargin = 1.0f;
+    [SerializeField] private float bankPushAccel = 8f;
+
+    [Header("Tabrakan")]
+    [Tooltip("Pakai material licin supaya kapal meluncur/berbelok saat menabrak batu, bukan menempel.")]
+    [SerializeField] private bool slipperyHull = true;
+
     private Rigidbody rb;
     private Collider boatCollider;
 
@@ -46,6 +68,9 @@ public class BoatController : NetworkBehaviour
     private readonly Dictionary<ulong, PlayerTetherData> activeTethers = new Dictionary<ulong, PlayerTetherData>();
     private readonly Dictionary<Collider, Vector3> activeObstacleContacts = new Dictionary<Collider, Vector3>();
     private readonly List<Collider> staleContactsBuffer = new List<Collider>();
+
+    private Vector3 currentFlow = Vector3.zero;
+    private bool riverSearched = false;
 
     private void Awake()
     {
@@ -61,6 +86,27 @@ public class BoatController : NetworkBehaviour
         if (rb.angularDamping < 2.5f)
         {
             rb.angularDamping = 3.5f;
+        }
+
+        // Hambatan diganti drag relatif terhadap air (lihat ApplyRiverDrift), kalau tidak kapal tidak akan pernah mencapai kecepatan arus
+        if (driftWithRiver) rb.linearDamping = 0f;
+        if (slipperyHull) ApplySlipperyMaterial();
+    }
+
+    private void ApplySlipperyMaterial()
+    {
+        var mat = new PhysicsMaterial("BoatSlide")
+        {
+            dynamicFriction = 0.05f,
+            staticFriction = 0.05f,
+            bounciness = 0.1f,
+            frictionCombine = PhysicsMaterialCombine.Minimum,
+            bounceCombine = PhysicsMaterialCombine.Average
+        };
+
+        foreach (Collider col in GetComponentsInChildren<Collider>())
+        {
+            if (!col.isTrigger) col.sharedMaterial = mat;
         }
     }
 
@@ -164,6 +210,7 @@ public class BoatController : NetworkBehaviour
         CleanupStaleContacts();
         ProcessActivePulls();
         ProcessActiveTethers();
+        ApplyRiverDrift();
         ClampHorizontalSpeed();
     }
 
@@ -326,13 +373,79 @@ public class BoatController : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Kapal hanyut mengikuti arus spline: percepatan menuju kecepatan arus di titik sungai terdekat.
+    /// Tabrakan dengan batu/benda lain ditangani PhysX (Rigidbody), jadi posisi & arah kapal berubah alami.
+    /// </summary>
+    private void ApplyRiverDrift()
+    {
+        if (!driftWithRiver)
+        {
+            currentFlow = Vector3.zero;
+            return;
+        }
+
+        if (river == null && !riverSearched)
+        {
+            riverSearched = true;
+            river = FindFirstObjectByType<RiverPath>();
+            if (river == null) Debug.LogWarning("[BoatController] RiverPath tidak ditemukan, kapal tidak akan hanyut.", this);
+        }
+
+        bool hasRiver = river != null;
+        RiverPath.Sample s = default;
+        Vector3 flow = Vector3.zero;
+
+        if (hasRiver)
+        {
+            s = river.SampleAt(transform.position);
+            flow = s.flowVelocity * flowInfluence;
+            flow.y = 0f;
+        }
+        currentFlow = flow;
+
+        // Drag relatif air: v -> flow. Tanpa tarikan, kapal menyamai kecepatan arus.
+        Vector3 v = rb.linearVelocity;
+        v.y = 0f;
+        rb.AddForce((flow - v) * waterDrag, ForceMode.Acceleration);
+
+        if (!hasRiver) return;
+
+        if (keepInsideBanks)
+        {
+            float limit = Mathf.Max(0.1f, s.halfWidth - bankMargin);
+            if (s.lateral > limit)
+            {
+                Vector3 toCenter = s.center - transform.position;
+                toCenter.y = 0f;
+                if (toCenter.sqrMagnitude > 0.0001f)
+                {
+                    float k = Mathf.Clamp01((s.lateral - limit) / Mathf.Max(0.01f, bankMargin));
+                    rb.AddForce(toCenter.normalized * bankPushAccel * k, ForceMode.Acceleration);
+                }
+            }
+        }
+
+        // Menghadap searah aliran hanya saat bebas (tidak ditarik, tidak sedang menempel di batu)
+        if (alignHeadingToFlow && activePulls.Count == 0 && activeObstacleContacts.Count == 0 && flow.sqrMagnitude > 0.01f)
+        {
+            float targetYaw = Quaternion.LookRotation(flow.normalized, Vector3.up).eulerAngles.y + headingOffsetDegrees;
+            float errRad = Mathf.DeltaAngle(rb.rotation.eulerAngles.y, targetYaw) * Mathf.Deg2Rad;
+            float desiredAng = Mathf.Clamp(errRad * flowAlignResponsiveness, -flowAlignMaxTurnRad, flowAlignMaxTurnRad);
+            rb.AddTorque(Vector3.up * ((desiredAng - rb.angularVelocity.y) * turnTorqueGain), ForceMode.Acceleration);
+        }
+    }
+
+    // Batas kecepatan diukur RELATIF terhadap arus, supaya arus tidak ikut terpotong oleh maxPullSpeed
     private void ClampHorizontalSpeed()
     {
-        Vector3 flatVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
-        if (flatVel.magnitude > maxPullSpeed)
+        Vector3 vel = rb.linearVelocity;
+        Vector3 rel = new Vector3(vel.x - currentFlow.x, 0f, vel.z - currentFlow.z);
+
+        if (rel.magnitude > maxPullSpeed)
         {
-            Vector3 clamped = flatVel.normalized * maxPullSpeed;
-            rb.linearVelocity = new Vector3(clamped.x, rb.linearVelocity.y, clamped.z);
+            Vector3 clamped = rel.normalized * maxPullSpeed;
+            rb.linearVelocity = new Vector3(currentFlow.x + clamped.x, vel.y, currentFlow.z + clamped.z);
         }
     }
 

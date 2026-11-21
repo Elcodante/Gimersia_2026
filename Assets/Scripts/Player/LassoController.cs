@@ -27,8 +27,20 @@ public class LassoController : NetworkBehaviour
     [Header("Pengaturan Kendur & Putus Tali")]
     [SerializeField] private Key slackKey = Key.G;
     [SerializeField] private float slackExtendSpeed = 4.0f;
+    [Tooltip("Jarak putus: tali lepas otomatis kalau kapal terseret lebih jauh dari ini.")]
     [SerializeField] private float maxRopeLength = 28.0f;
-    [SerializeField] private float slackSagMultiplier = 0.45f;
+    [SerializeField] private float slackSagMultiplier = 0.45f;   // hanya dipakai jika Use Verlet Rope dimatikan
+
+    [Header("Visual Tali 3D (ragdoll-like / Verlet)")]
+    [SerializeField] private bool useVerletRope = true;
+    [Tooltip("Kosong = dibuat otomatis sebagai child saat game mulai.")]
+    [SerializeField] private VerletRopeVisual ropeVisual;
+    [Tooltip("Material tali (tekstur tali). Kosong = material coklat sederhana.")]
+    [SerializeField] private Material ropeMaterial;
+    [Tooltip("Opsional: model 3D kait / ujung tali.")]
+    [SerializeField] private GameObject hookPrefab;
+    [Tooltip("Opsional: titik tangan tempat tali keluar. Kosong = posisi pemain + 0.5 ke atas.")]
+    [SerializeField] private Transform handAnchor;
 
     [Header("Pengaturan Visual Parabola & Durasi")]
     [SerializeField] private int arcSegments = 20;
@@ -62,11 +74,26 @@ public class LassoController : NetworkBehaviour
 
     private Coroutine serverSequenceCoroutine;
 
+    // Panjang maksimal tali boleh dikendorkan (G) = jarak lempar maksimal.
+    private float MaxSlackLength => Mathf.Min(lassoRange, maxRopeLength);
+
     private void Awake()
     {
         lineRenderer = GetComponent<LineRenderer>();
         playerMovement = GetComponent<PlayerMovement>();
         lineRenderer.enabled = false;
+
+        if (useVerletRope)
+        {
+            if (ropeVisual == null) ropeVisual = GetComponentInChildren<VerletRopeVisual>(true);
+            if (ropeVisual == null)
+            {
+                var go = new GameObject("RopeVisual");
+                go.transform.SetParent(transform, false);
+                ropeVisual = go.AddComponent<VerletRopeVisual>();
+            }
+            ropeVisual.Configure(ropeMaterial, hookPrefab);
+        }
     }
 
     public override void OnNetworkSpawn()
@@ -91,6 +118,11 @@ public class LassoController : NetworkBehaviour
             UpdateMovementLock();
         }
 
+    }
+
+    // LateUpdate: supaya pangkal tali ikut posisi tangan setelah pemain/kapal selesai bergerak
+    private void LateUpdate()
+    {
         UpdateRopeVisuals();
     }
 
@@ -188,14 +220,35 @@ public class LassoController : NetworkBehaviour
         return transform.position + transform.forward * Mathf.Min(5f, lassoRange);
     }
 
+    private Vector3 GetRopeOrigin()
+    {
+        return (handAnchor != null) ? handAnchor.position : transform.position + Vector3.up * 0.5f;
+    }
+
+    private static Vector3 ArcPoint(Vector3 start, Vector3 end, float t, float arcHeight)
+    {
+        t = Mathf.Clamp01(t);
+        Vector3 p = Vector3.Lerp(start, end, t);
+        p.y += 4f * arcHeight * t * (1f - t);
+        return p;
+    }
+
     private void UpdateRopeVisuals()
     {
-        Vector3 ropeOrigin = transform.position + Vector3.up * 0.5f;
+        Vector3 ropeOrigin = GetRopeOrigin();
+        bool verlet = useVerletRope && ropeVisual != null;
 
         if (IsOwner && isLocalAiming)
         {
+            if (verlet) ropeVisual.SetVisible(false);
             lineRenderer.enabled = true;
             DrawParabola(ropeOrigin, delayedAimPoint, 1f, maxArcHeight);
+            return;
+        }
+
+        if (verlet)
+        {
+            UpdateVerletRope(ropeOrigin);
             return;
         }
 
@@ -225,6 +278,43 @@ public class LassoController : NetworkBehaviour
                 lineRenderer.enabled = true;
                 DrawParabola(ropeOrigin, netTargetPoint.Value, netProgress.Value, maxArcHeight * 0.35f);
                 break;
+        }
+    }
+
+    private void UpdateVerletRope(Vector3 origin)
+    {
+        lineRenderer.enabled = false;
+
+        switch (netState.Value)
+        {
+            case LassoState.Idle:
+                ropeVisual.SetVisible(false);
+                break;
+
+            case LassoState.Throwing:
+            {
+                // Ujung tali terbang mengikuti parabola, sisa tali menjuntai di belakangnya
+                Vector3 tip = ArcPoint(origin, netTargetPoint.Value, netProgress.Value, maxArcHeight);
+                ropeVisual.Drive(origin, tip, Vector3.Distance(origin, tip) * 1.1f + 0.15f);
+                break;
+            }
+
+            case LassoState.Pulling:
+            {
+                // Panjang tali (datar) + selisih tinggi -> panjang 3D. Kendor = melengkung, tegang = lurus.
+                Vector3 anchor = netTargetPoint.Value;
+                float dy = anchor.y - origin.y;
+                float len = netRopeLength.Value;
+                ropeVisual.Drive(origin, anchor, Mathf.Sqrt(len * len + dy * dy));
+                break;
+            }
+
+            case LassoState.Retracting:
+            {
+                Vector3 tip = ArcPoint(origin, netTargetPoint.Value, netProgress.Value, maxArcHeight * 0.35f);
+                ropeVisual.Drive(origin, tip, Vector3.Distance(origin, tip) * 1.1f + 0.15f);
+                break;
+            }
         }
     }
 
@@ -325,6 +415,13 @@ public class LassoController : NetworkBehaviour
 
                 float actualDist = FlatDistance(transform.position, activeTargetPos);
 
+                // Kapal terseret terlalu jauh dari batu (mis. terbawa arus): tali putus/lepas di kondisi apa pun
+                if (actualDist >= maxRopeLength)
+                {
+                    StopPullAndReset(true);
+                    yield break;
+                }
+
                 if (serverPullHeld)
                 {
                     // Jika target adalah BATU dan kapal sudah menyentuh batu target:
@@ -374,24 +471,6 @@ public class LassoController : NetworkBehaviour
                         }
                     }
                 }
-                else if (serverSlackHeld)
-                {
-                    trashTugTimer = 0f;
-                    if (boatController != null)
-                    {
-                        boatController.SetPlayerPull(OwnerClientId, false, activeTargetPos, transform.position, activeTargetCol);
-                        boatController.SetPlayerTether(OwnerClientId, false, activeTargetPos, transform.position, netRopeLength.Value);
-                    }
-
-                    netRopeLength.Value += slackExtendSpeed * Time.deltaTime;
-                    netRopeTension.Value = Mathf.MoveTowards(netRopeTension.Value, 0f, 4f * Time.deltaTime);
-
-                    if (netRopeLength.Value >= maxRopeLength)
-                    {
-                        StopPullAndReset(true);
-                        yield break;
-                    }
-                }
                 else
                 {
                     trashTugTimer = 0f;
@@ -400,12 +479,17 @@ public class LassoController : NetworkBehaviour
                         boatController.SetPlayerPull(OwnerClientId, false, activeTargetPos, transform.position, activeTargetCol);
                     }
 
-                    if (actualDist >= maxRopeLength)
+                    // G: kendorkan tali, tapi TIDAK boleh melebihi jarak lempar maksimal (lassoRange).
+                    // Sebelumnya batasnya maxRopeLength (28) > lassoRange (25), jadi tali bisa lebih panjang dari jarak lempar.
+                    if (serverSlackHeld && netRopeLength.Value < MaxSlackLength)
                     {
-                        StopPullAndReset(true);
-                        yield break;
+                        netRopeLength.Value = Mathf.Min(
+                            netRopeLength.Value + slackExtendSpeed * Time.deltaTime,
+                            MaxSlackLength
+                        );
                     }
 
+                    // Kalau kapal hanyut sampai tali habis, tali menahan kapal (tether), baik saat G ditekan maupun tidak
                     if (actualDist > netRopeLength.Value + 0.05f)
                     {
                         netRopeTension.Value = Mathf.MoveTowards(netRopeTension.Value, 1f, 5f * Time.deltaTime);

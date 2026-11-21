@@ -55,7 +55,7 @@ Material:
     - _GlintNearFade: 2
     - _NormalStrength: 3
     - _ObstacleFoamWidth: 0.38
-    - _ObstacleMaxDist: 2.5
+    - _ObstacleMaxDist: 4
     - _QueueControl: 0
     - _QueueOffset: 0
     - _ShallowAlpha: 0.75
@@ -67,7 +67,7 @@ Material:
     m_Colors:
     - _DeepColor: {r: 0.079999976, g: 0.54999995, b: 0.62, a: 1}
     - _FoamColor: {r: 1, g: 1, b: 1, a: 1}
-    - _MapOrigin: {r: -129.23987, g: -177.67763, b: 0, a: 0}
+    - _MapOrigin: {r: -333.82986, g: -179.19763, b: 0, a: 0}
     - _MapSize: {r: 292.02533, g: 199.07233, b: 0, a: 0}
     - _ShallowColor: {r: 0.39999998, g: 0.85, b: 0.78, a: 1}
     - _WaveTiling: {r: 13, g: 4, b: 0, a: 0}
