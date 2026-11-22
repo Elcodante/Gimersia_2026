@@ -104,14 +104,22 @@ public class PlayerMovement : NetworkBehaviour
 
     private void Update()
     {
-        if (!IsSpawned || !IsOwner || !Application.isFocused) return;
+        if (!IsSpawned || !IsOwner) return;
 
-        if (!isMovementLocked && !InGameMenuUI.ShouldLockMovement)
+        // Cegah input jalan WASD saat sedang membidik, melempar, menarik, menunggu laso kembali, atau respawn
+        if (Application.isFocused && !isMovementLocked && !respawnLocked)
         {
             HandleMovement();
         }
 
+        if (respawnLocked) return;
+
         CheckIfStillOnBoat();
+
+        if (isFallingOff)
+        {
+            CheckDrowning();
+        }
     }
 
     private void HandleMovement()
@@ -184,8 +192,30 @@ public class PlayerMovement : NetworkBehaviour
     [ClientRpc]
     private void EnableGravityClientRpc()
     {
-        rb.isKinematic = false;
-        rb.interpolation = RigidbodyInterpolation.Interpolate;
+        // Hanya pemilik yang mensimulasikan jatuh. Salinan di peer lain mengikuti NetworkTransform (kinematic),
+        // kalau tidak, fisika lokal dan posisi dari jaringan saling tarik sehingga jatuhnya terasa tersangkut.
+        rb.isKinematic = !IsOwner;
+        rb.interpolation = IsOwner ? RigidbodyInterpolation.Interpolate : RigidbodyInterpolation.None;
+
+        if (!IsOwner) return;
+
+        BoatController boat = FindFirstObjectByType<BoatController>();
+        if (boat == null) return;
+
+        // Pastikan pemain tidak bertabrakan dengan badan kapal saat jatuh (flag ignore dipasang ulang)
+        IgnoreCollisionWithBoat(boat);
+
+        // Kapal sekarang hanyut. Bawa kecepatan kapal + dorong sedikit menjauh, supaya buritan kapal
+        // yang bergerak tidak menyapu pemain yang jatuh tepat di belakangnya.
+        Rigidbody boatRb = boat.GetComponent<Rigidbody>();
+        Vector3 inherited = boatRb != null ? boatRb.linearVelocity : Vector3.zero;
+        inherited.y = 0f;
+
+        Vector3 away = transform.position - boat.transform.position;
+        away.y = 0f;
+        away = away.sqrMagnitude > 0.01f ? away.normalized : Vector3.zero;
+
+        rb.linearVelocity = inherited + away * 1.5f;
     }
 
     // ------------------------------------------------------------------ TENGGELAM
@@ -208,7 +238,7 @@ public class PlayerMovement : NetworkBehaviour
         if (river == null && !riverSearched)
         {
             riverSearched = true;
-            river = FindFirstObjectByType<RiverPath>();
+            river = RiverPath.Main;
         }
 
         if (river != null)

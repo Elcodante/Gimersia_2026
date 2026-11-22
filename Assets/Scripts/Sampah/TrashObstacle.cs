@@ -17,6 +17,8 @@ public class TrashObstacle : NetworkBehaviour
 
     [Header("Hanyut Mengikuti Arus")]
     [SerializeField] private bool driftWithRiver = true;
+    [Tooltip("Sampah diam di tempat sampai ditarik (F) sebanyak yang dibutuhkan. Setelah itu terlepas dan hanyut mengikuti arus.")]
+    [SerializeField] private bool startAnchored = true;
     [Tooltip("Kuat arus yang membawa sampah (dikali Flow Speed di RiverPath).")]
     [SerializeField, Range(0f, 1.5f)] private float flowInfluence = 0.8f;
     [Tooltip("Hambatan air relatif terhadap arus. Makin besar = makin cepat menyamai kecepatan arus.")]
@@ -49,10 +51,16 @@ public class TrashObstacle : NetworkBehaviour
     private int requiredTugs;
     private int currentTugs = 0;
     private bool isCleared = false;
+    private bool isFreed = false;
 
     private Rigidbody rb;
     private RiverPath river;
     private float heightOffset;
+    private bool heightInit;
+    private Vector3 startPos;
+    private float spawnTime;
+    private bool debugLogged;
+    private bool warnedNoRiver;
 
     private readonly NetworkVariable<Vector3> netPos = new NetworkVariable<Vector3>();
     private readonly NetworkVariable<float> netYaw = new NetworkVariable<float>();
@@ -65,7 +73,8 @@ public class TrashObstacle : NetworkBehaviour
     private float bobPhase;
     private Coroutine shakeCoroutine;
 
-    public bool IsCleared => isCleared;
+    /// <summary>True jika sampah sudah tidak bisa jadi target laso (terlepas dan hanyut, atau sudah dihapus).</summary>
+    public bool IsCleared => isCleared || isFreed;
 
     private void Awake()
     {
@@ -128,23 +137,11 @@ public class TrashObstacle : NetworkBehaviour
             int max = Mathf.Max(min, maxTugsRequired);
             requiredTugs = Random.Range(min, max + 1);
 
-            river = FindFirstObjectByType<RiverPath>();
+            startPos = rb.position;
+            spawnTime = Time.time;
 
-            if (driftWithRiver)
-            {
-                rb.isKinematic = false;
-
-                if (river != null)
-                {
-                    float waterY = river.SampleAt(rb.position).center.y;
-                    heightOffset = useInitialHeight ? rb.position.y - waterY : floatHeight;
-                }
-                else
-                {
-                    // Tanpa sungai: kunci ketinggian supaya tidak jatuh
-                    rb.constraints |= RigidbodyConstraints.FreezePositionY;
-                }
-            }
+            // Sampah awalnya "tersangkut" (diam). Hanyut baru dimulai setelah ditarik cukup kali (lihat ReleaseTrash).
+            if (driftWithRiver && !startAnchored) EnableDrift();
 
             netPos.Value = rb.position;
             netYaw.Value = rb.rotation.eulerAngles.y;
@@ -157,16 +154,79 @@ public class TrashObstacle : NetworkBehaviour
         }
     }
 
+    // Cari sungai (bisa dipanggil berulang) dan tentukan tinggi mengapung
+    private void TryInitRiver()
+    {
+        if (river == null) river = RiverPath.Main;
+        if (river == null || heightInit) return;
+
+        float waterY = river.SampleAt(rb.position).center.y;
+        if (!float.IsFinite(waterY)) return;
+
+        heightOffset = useInitialHeight ? rb.position.y - waterY : floatHeight;
+        heightInit = true;
+        rb.constraints &= ~RigidbodyConstraints.FreezePositionY;
+    }
+
+    // Dipanggil saat tarikan cukup: sampah lepas dari tempatnya dan mulai hanyut mengikuti arus
+    private void ReleaseTrash()
+    {
+        if (isFreed || isCleared) return;
+        isFreed = true;
+
+        if (driftWithRiver)
+        {
+            EnableDrift();
+            TriggerShakeClientRpc();   // goyangan "lepas"
+        }
+        else
+        {
+            ClearTrash();              // tanpa hanyut: perilaku lama (hilang)
+        }
+    }
+
+    private void EnableDrift()
+    {
+        spawnTime = Time.time;
+        rb.isKinematic = false;
+        TryInitRiver();
+
+        // Tanpa sungai (sementara): kunci ketinggian supaya tidak jatuh
+        if (!heightInit) rb.constraints |= RigidbodyConstraints.FreezePositionY;
+    }
+
     private void FixedUpdate()
     {
         if (!IsServer || !IsSpawned || isCleared || !driftWithRiver || rb.isKinematic) return;
 
-        Vector3 pos = rb.position;
-        Vector3 flow = Vector3.zero;
+        if (river == null || !heightInit)
+        {
+            TryInitRiver();
+            if (river == null && !warnedNoRiver)
+            {
+                warnedNoRiver = true;
+                Debug.LogWarning($"[Trash] '{name}': RiverPath tidak ditemukan di scene, sampah tidak bisa hanyut.", this);
+            }
+        }
 
-        if (river != null)
+        Vector3 pos = rb.position;
+        if (!IsFinite(pos))
+        {
+            Debug.LogWarning($"[Trash] '{name}': posisi rusak (NaN), dikembalikan ke posisi awal.", this);
+            rb.position = startPos;
+            rb.linearVelocity = Vector3.zero;
+            return;
+        }
+
+        Vector3 flow = Vector3.zero;
+        float lateral = 0f, halfWidth = 0f;
+
+        if (river != null && heightInit)
         {
             RiverPath.Sample s = river.SampleAt(pos);
+            lateral = s.lateral;
+            halfWidth = s.halfWidth;
+
             flow = s.flowVelocity * flowInfluence;
             flow.y = 0f;
             if (!IsFinite(flow)) flow = Vector3.zero;   // jangan sampai NaN masuk ke AddForce
@@ -177,8 +237,10 @@ public class TrashObstacle : NetworkBehaviour
             float spring = (targetY - pos.y) * buoyancySpring - vy * buoyancyDamping;
             if (float.IsFinite(spring)) rb.AddForce(Vector3.up * spring, ForceMode.Acceleration);
 
-            if (s.lateral > s.halfWidth + despawnDistanceFromRiver)
+            // Hanyut terlalu jauh dari sungai (mis. lewat ujung spline): hapus. Ada jeda 3 detik agar tidak terhapus saat baru muncul.
+            if (Time.time - spawnTime > 3f && s.lateral > s.halfWidth + despawnDistanceFromRiver)
             {
+                Debug.Log($"[Trash] '{name}' dihapus: {s.lateral:F1} m dari tengah sungai (batas {s.halfWidth + despawnDistanceFromRiver:F1}).", this);
                 ClearTrash();
                 return;
             }
@@ -193,6 +255,13 @@ public class TrashObstacle : NetworkBehaviour
         }
         v.y = 0f;
         rb.AddForce((flow - v) * waterDrag, ForceMode.Acceleration);
+
+        // Diagnostik satu kali, 2 detik setelah muncul (untuk mencari tahu kalau sampah tidak hanyut)
+        if (!debugLogged && Time.time - spawnTime > 2f)
+        {
+            debugLogged = true;
+            Debug.Log($"[Trash] '{name}' diagnostik: pos={pos}, vel={rb.linearVelocity}, arus={flow}, lateral={lateral:F1}, setengahLebar={halfWidth:F1}, river={(river != null)}, tinggiSiap={heightInit}, kinematic={rb.isKinematic}", this);
+        }
 
         netPos.Value = rb.position;
         netYaw.Value = rb.rotation.eulerAngles.y;
@@ -228,13 +297,13 @@ public class TrashObstacle : NetworkBehaviour
     /// </summary>
     public void TugTrash()
     {
-        if (!IsServer || !IsSpawned || isCleared) return;
+        if (!IsServer || !IsSpawned || isCleared || isFreed) return;
 
         currentTugs++;
 
         if (currentTugs >= requiredTugs)
         {
-            ClearTrash();
+            ReleaseTrash();
         }
         else
         {

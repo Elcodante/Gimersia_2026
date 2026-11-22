@@ -37,6 +37,8 @@ public class BoatController : NetworkBehaviour
     [SerializeField] private float stopSurfaceDistance = 0.22f;  // Jarak berhenti terhadap batu TARGET
     [SerializeField] private float obstacleSlideBlend = 0.9f;    // Seberapa kuat arah tarikan dibelokkan mengikuti sisi batu penghalang
     [SerializeField] private float obstaclePushOutAccel = 4.0f;  // Dorongan halus keluar dari permukaan batu penghalang
+    [Tooltip("Jarak sebelum tali habis tempat kapal mulai diperlambat halus (bukan mendadak tertahan).")]
+    [SerializeField] private float tetherSoftZone = 1.5f;
     [SerializeField] private float tetherStiffness = 14.0f;      // Kekuatan tahan tali saat dikunci (tanpa teleportasi MovePosition)
 
     [Header("Arus Sungai (Spline)")]
@@ -362,14 +364,24 @@ public class BoatController : NetworkBehaviour
             outward.y = 0f;
             float currentDist = outward.magnitude;
 
-            if (currentDist > tether.maxLength && currentDist > 0.001f)
+            float soft = Mathf.Max(0.01f, tetherSoftZone);
+            if (currentDist > tether.maxLength - soft && currentDist > 0.001f)
             {
                 Vector3 outwardDir = outward / currentDist;
-                float excess = currentDist - tether.maxLength;
-
-                // Tahan kecepatan yang menjauh dengan gaya pegas fisika murni (bukan MovePosition)
                 float outwardSpeed = Mathf.Max(0f, Vector3.Dot(rb.linearVelocity, outwardDir));
-                float pullBackAccel = Mathf.Min(excess * tetherStiffness + outwardSpeed * 4f, 20f);
+
+                // Zona lembut: makin dekat ujung tali, makin kuat peredaman kecepatan menjauh (tidak mendadak)
+                float ramp = Mathf.Clamp01((currentDist - (tether.maxLength - soft)) / soft);
+                float pullBackAccel = ramp * ramp * outwardSpeed * 6f;
+
+                // Melewati panjang tali: pegas fisika murni (bukan MovePosition)
+                float excess = currentDist - tether.maxLength;
+                if (excess > 0f)
+                {
+                    pullBackAccel += excess * tetherStiffness + outwardSpeed * 4f;
+                }
+
+                pullBackAccel = Mathf.Min(pullBackAccel, 20f);
                 rb.AddForce(-outwardDir * pullBackAccel, ForceMode.Acceleration);
             }
         }
@@ -390,7 +402,7 @@ public class BoatController : NetworkBehaviour
         if (river == null && !riverSearched)
         {
             riverSearched = true;
-            river = FindFirstObjectByType<RiverPath>();
+            river = RiverPath.Main;
             if (river == null) Debug.LogWarning("[BoatController] RiverPath tidak ditemukan, kapal tidak akan hanyut.", this);
         }
 

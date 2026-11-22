@@ -22,6 +22,47 @@ public class RiverPath : MonoBehaviour
 
     public float WidthAt(float t) => baseWidth * widthOverLength.Evaluate(t);
 
+    /// <summary>Punya spline dengan minimal 2 knot. RiverPath kosong (mis. tertempel di objek lain) tidak valid.</summary>
+    public bool IsValid
+    {
+        get
+        {
+            var c = Container;
+            return c != null && c.Spline != null && c.Spline.Count >= 2;
+        }
+    }
+
+    static RiverPath mainRiver;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() { mainRiver = null; }
+
+    /// <summary>
+    /// Sungai utama untuk gameplay: RiverPath VALID dengan spline terbanyak knot.
+    /// Gunakan ini, bukan FindFirstObjectByType, yang bisa mengambil RiverPath kosong.
+    /// </summary>
+    public static RiverPath Main
+    {
+        get
+        {
+            if (mainRiver != null && mainRiver.isActiveAndEnabled && mainRiver.IsValid) return mainRiver;
+
+            mainRiver = null;
+            int bestKnots = 0;
+            foreach (var r in FindObjectsByType<RiverPath>(FindObjectsSortMode.None))
+            {
+                if (!r.isActiveAndEnabled || !r.IsValid) continue;
+                int knots = r.Container.Spline.Count;
+                if (knots > bestKnots)
+                {
+                    bestKnots = knots;
+                    mainRiver = r;
+                }
+            }
+            return mainRiver;
+        }
+    }
+
     void OnValidate() => ApplyToMaterial();
     void Awake() => ApplyToMaterial();
 
@@ -41,19 +82,37 @@ public class RiverPath : MonoBehaviour
     public Sample SampleAt(Vector3 worldPos)
     {
         var c = Container;
+
+        // RiverPath tanpa spline valid: sampel netral (bukan NaN)
+        if (c == null || c.Spline == null || c.Spline.Count < 2)
+            return new Sample { center = worldPos, flowVelocity = Vector3.zero, lateral = 0f, halfWidth = baseWidth * 0.5f };
+
+        // Posisi query rusak (NaN/Infinity): kembalikan sampel netral supaya tidak merambat ke fisika
+        if (!float.IsFinite(worldPos.x) || !float.IsFinite(worldPos.y) || !float.IsFinite(worldPos.z))
+            return new Sample { center = Vector3.zero, flowVelocity = Vector3.zero, lateral = 0f, halfWidth = baseWidth * 0.5f };
+
         float3 local = c.transform.InverseTransformPoint(worldPos);
         SplineUtility.GetNearestPoint(c.Spline, local, out float3 _, out float t);
+        if (float.IsNaN(t) || float.IsInfinity(t)) t = 0f;
+        t = Mathf.Clamp01(t);
 
         Vector3 center = c.EvaluatePosition(t);
+
+        // Arah aliran dari tangen spline; bila tangen rusak/nol, pakai beda-hingga dari posisi spline
         Vector3 dir = c.EvaluateTangent(t);
         dir.y = 0f;
-        // Pengaman: tangen spline bisa nol/NaN (knot berimpit, ujung spline) -> Normalize jadi NaN
+        if (float.IsNaN(dir.x) || float.IsNaN(dir.z) || dir.sqrMagnitude < 1e-8f)
+        {
+            Vector3 a = c.EvaluatePosition(Mathf.Clamp01(t - 0.01f));
+            Vector3 b = c.EvaluatePosition(Mathf.Clamp01(t + 0.01f));
+            dir = b - a;
+            dir.y = 0f;
+        }
         if (float.IsNaN(dir.x) || float.IsNaN(dir.z) || dir.sqrMagnitude < 1e-8f) dir = Vector3.zero;
         else dir.Normalize();
 
-        // Pengaman: lebar 0/NaN membuat lateral / half = NaN
         float w = WidthAt(t) * 0.5f;
-        float half = (w > 0.01f) ? w : 0.01f;
+        float half = (w > 0.01f) ? w : 0.01f;   // lebar 0/NaN membuat lateral / half = NaN
         Vector3 off = worldPos - center; off.y = 0f;
         float lateral = off.magnitude;
         float l01 = Mathf.Clamp01(lateral / half);
