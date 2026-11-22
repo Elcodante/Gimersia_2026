@@ -29,7 +29,10 @@ public class LassoController : NetworkBehaviour
     [Tooltip("Jarak putus: tali lepas otomatis kalau kapal terseret lebih jauh dari ini.")]
     [SerializeField] private float maxRopeLength = 28.0f;
     [Tooltip("Kecepatan menggulung tali kendor saat F ditahan (m/detik). Makin kecil = tali mengencang makin pelan/halus.")]
-    [SerializeField] private float ropeReelSpeed = 3.5f;
+    [SerializeField] private float ropeReelSpeed = 5.0f;   // kecepatan gulung MAKSIMUM (saat kendor banyak)
+    [Tooltip("Gulungan melambat saat kendor tinggal sedikit agar tali mengencang halus, tidak menyentak. Kecepatan = kendor (m) x nilai ini, dibatasi Min dan Max.")]
+    [SerializeField] private float ropeReelEase = 1.5f;
+    [SerializeField] private float ropeReelMinSpeed = 0.8f;
     [SerializeField] private float slackSagMultiplier = 0.45f;   // hanya dipakai jika Use Verlet Rope dimatikan
 
     [Header("Visual Tali 3D (ragdoll-like / Verlet)")]
@@ -118,7 +121,6 @@ public class LassoController : NetworkBehaviour
             HandleOwnerInput();
             UpdateMovementLock();
         }
-
     }
 
     // LateUpdate: supaya pangkal tali ikut posisi tangan setelah pemain/kapal selesai bergerak
@@ -309,16 +311,15 @@ public class LassoController : NetworkBehaviour
 
             case LassoState.Pulling:
             {
-                // Panjang tali (datar) + selisih tinggi -> panjang 3D. Kendor = melengkung, tegang = lurus.
+                // Samakan referensi kendor dengan pusat player (seperti di server) agar tali tegang saat ditarik
                 Vector3 anchor = netTargetPoint.Value;
-                float dy = anchor.y - origin.y;
-                float len = netRopeLength.Value;
-                float ropeLen3D = Mathf.Sqrt(len * len + dy * dy);
-
-                // Tegang bila sedang ditarik (tension tinggi) ATAU jarak kapal sudah hampir/sudah sepanjang tali.
                 float chord = Vector3.Distance(origin, anchor);
+                float flatDist = FlatDistance(transform.position, anchor);
+                float slack = Mathf.Max(0f, netRopeLength.Value - flatDist);
+                float ropeLen3D = chord + slack;
+
                 // Murni dari geometri (kendor vs jarak) dan dihaluskan, supaya tali mengencang bertahap, tidak "dihentak".
-                float slackRatio = (ropeLen3D - chord) / Mathf.Max(0.01f, ropeLen3D);
+                float slackRatio = slack / Mathf.Max(0.01f, ropeLen3D);
                 float k = Mathf.Clamp01(slackRatio / 0.12f);
                 float taut = 1f - k * k * (3f - 2f * k);
 
@@ -399,6 +400,7 @@ public class LassoController : NetworkBehaviour
             netTargetPoint.Value = targetPos;
 
             float initialDist = FlatDistance(transform.position, targetPos);
+            float prevActualDist = initialDist;
             netRopeLength.Value = Mathf.Clamp(initialDist, 0.5f, maxRopeLength - 0.5f);
             netRopeTension.Value = 0.2f;
 
@@ -456,10 +458,10 @@ public class LassoController : NetworkBehaviour
                         boatController.SetPlayerTether(OwnerClientId, false, activeTargetPos, transform.position, netRopeLength.Value);
 
                         // Kapal menempel di batu (mis. hanyut lalu nyangkut): gaya tarik berhenti, TAPI tali kendor
-                        // tetap digulung pelan sampai tegang. Dulu tali dibiarkan kendor.
+                        // tetap digulung pelan sampai tegang.
                         if (netRopeLength.Value > actualDist)
                         {
-                            netRopeLength.Value = Mathf.Max(actualDist, netRopeLength.Value - ropeReelSpeed * Time.deltaTime);
+                            netRopeLength.Value = Mathf.Max(actualDist, netRopeLength.Value - ReelRate(netRopeLength.Value - actualDist) * Time.deltaTime);
                         }
                         else
                         {
@@ -468,6 +470,7 @@ public class LassoController : NetworkBehaviour
 
                         float stuckTension = (netRopeLength.Value - actualDist > 0.1f) ? 0.3f : 0.85f;
                         netRopeTension.Value = Mathf.MoveTowards(netRopeTension.Value, stuckTension, 3f * Time.deltaTime);
+                        prevActualDist = actualDist;
                         yield return null;
                         continue;
                     }
@@ -479,13 +482,12 @@ public class LassoController : NetworkBehaviour
                         boatController.SetPlayerPull(OwnerClientId, true, activeTargetPos, transform.position, activeTargetCol);
                     }
 
-                    // Gulung tali kendor dengan kecepatan tetap, tapi TIDAK PERNAH lebih pendek dari jarak kapal yang sebenarnya.
-                    //  - tali kendor tetap mengencang meski kapal sedang nyangkut (tidak bergerak)
-                    //  - tidak ada "tali terlalu pendek" yang menyentak kapal seperti boost saat F dilepas
-                    //  - tidak langsung tegang mendadak: kendor hilang bertahap (ropeReelSpeed)
+                    // Gulung tali kendor + ikut kurangi jarak yang sudah ditempuh kapal agar tali tidak malah mengendur saat F ditahan
+                    float boatClosed = Mathf.Max(0f, prevActualDist - actualDist);
                     if (netRopeLength.Value > actualDist)
                     {
-                        netRopeLength.Value = Mathf.Max(0.5f, Mathf.Max(actualDist, netRopeLength.Value - ropeReelSpeed * Time.deltaTime));
+                        float reelDelta = boatClosed + ReelRate(netRopeLength.Value - actualDist) * Time.deltaTime;
+                        netRopeLength.Value = Mathf.Max(0.5f, Mathf.Max(actualDist, netRopeLength.Value - reelDelta));
                     }
 
                     // Ketegangan visual tali mengikuti irama tarikan lembut
@@ -518,7 +520,6 @@ public class LassoController : NetworkBehaviour
                     }
 
                     // G: kendorkan tali, tapi TIDAK boleh melebihi jarak lempar maksimal (lassoRange).
-                    // Sebelumnya batasnya maxRopeLength (28) > lassoRange (25), jadi tali bisa lebih panjang dari jarak lempar.
                     if (serverSlackHeld && netRopeLength.Value < MaxSlackLength)
                     {
                         netRopeLength.Value = Mathf.Min(
@@ -528,7 +529,6 @@ public class LassoController : NetworkBehaviour
                     }
 
                     // Tali selalu menahan kapal di ujung panjangnya (baik saat G ditekan maupun tidak).
-                    // BoatController memperlambat kapal secara halus di zona sebelum tali habis.
                     bool nearlyTaut = actualDist > netRopeLength.Value - 0.05f;
                     netRopeTension.Value = Mathf.MoveTowards(netRopeTension.Value, nearlyTaut ? 1f : 0f, (nearlyTaut ? 5f : 3f) * Time.deltaTime);
                     if (boatController != null)
@@ -537,6 +537,7 @@ public class LassoController : NetworkBehaviour
                     }
                 }
 
+                prevActualDist = actualDist;
                 yield return null;
             }
         }
@@ -561,6 +562,12 @@ public class LassoController : NetworkBehaviour
         netProgress.Value = 0f;
         netState.Value = LassoState.Idle;
         serverSequenceCoroutine = null;
+    }
+
+    // Kecepatan gulung tali: cepat saat kendor banyak, melambat di akhir (supaya tali mengencang halus, tidak menyentak)
+    private float ReelRate(float slackLength)
+    {
+        return Mathf.Clamp(slackLength * ropeReelEase, ropeReelMinSpeed, ropeReelSpeed);
     }
 
     private Collider FindTargetAtPoint(Vector3 point)

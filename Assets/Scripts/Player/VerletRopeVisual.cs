@@ -15,28 +15,28 @@ public class VerletRopeVisual : MonoBehaviour
     [SerializeField] private float gravity = 14f;
     [Tooltip("Makin kecil = tali makin cepat berhenti bergoyang.")]
     [SerializeField, Range(0.8f, 1f)] private float damping = 0.98f;
-    [SerializeField, Range(1, 40)] private int constraintIterations = 20;
+    [SerializeField, Range(1, 40)] private int constraintIterations = 32;
     [Tooltip("Tali tidak boleh turun lebih rendah dari ujung terendah + offset ini (agar tidak tenggelam).")]
-    [SerializeField] private bool useFloor = true;
+    [SerializeField] private bool useFloor = false;
     [SerializeField] private float floorOffset = -0.15f;
 
     [Header("Air & Tali Mengapung")]
     [Tooltip("Tali mengapung tepat di atas permukaan air sungai (dibaca dari RiverPath). Matikan untuk memakai Floor Offset di atas.")]
-    [SerializeField] private bool useWaterSurface = true;
+    [SerializeField] private bool useWaterSurface = false;
     [Tooltip("Tinggi tali di atas permukaan air (di luar jari-jari tali). Terlalu rendah = tali menembus air dan memunculkan garis busa putih.")]
     [SerializeField] private float surfaceClearance = 0.06f;
     [Tooltip("Seberapa kuat arus membawa bagian tali yang mengapung (0 = tidak ikut arus).")]
     [SerializeField, Range(0f, 1f)] private float currentInfluence = 0.35f;
     [Tooltip("Hambatan air pada tali yang mengapung. Makin kecil = tali makin cepat berhenti bergoyang.")]
-    [SerializeField, Range(0.5f, 1f)] private float surfaceDamping = 0.9f;
+    [SerializeField, Range(0.5f, 1f)] private float surfaceDamping = 0.8f;
 
     [Header("Kelenturan (anti bergerigi)")]
     [Tooltip("Kekuatan menolak tekukan tajam. 0 = tali bisa bergerigi.")]
-    [SerializeField, Range(0f, 1f)] private float bendResistance = 0.6f;
+    [SerializeField, Range(0f, 1f)] private float bendResistance = 0.25f;
     [Tooltip("Jarak minimum dua titik berselang relatif terhadap lurus. Makin dekat 1 = tali makin kaku.")]
-    [SerializeField, Range(0.9f, 1f)] private float minBendRatio = 0.98f;
+    [SerializeField, Range(0.85f, 1f)] private float minBendRatio = 0.92f;
     [Tooltip("Kekuatan tali kendor membentuk lengkung halus di permukaan air.")]
-    [SerializeField, Range(0f, 0.3f)] private float arcShapeStrength = 0.08f;
+    [SerializeField, Range(0f, 0.3f)] private float arcShapeStrength = 0f;
 
     [Header("Bentuk 3D")]
     [SerializeField] private float radius = 0.05f;
@@ -62,6 +62,8 @@ public class VerletRopeVisual : MonoBehaviour
     private bool hasSurface;
     private Vector3 flowVel;      // laju arus pada tali (sudah dikali currentInfluence)
     private float bowSign = 1f;   // sisi lengkung tali kendor
+    private Vector3[] simBackup;  // keadaan simulasi saat tampilan di-blend ke lurus
+    private bool displayBlended;
 
     private Vector3[] pos, prev;
     private Mesh mesh;
@@ -123,8 +125,11 @@ public class VerletRopeVisual : MonoBehaviour
         pos[0] = start;
         pos[particleCount - 1] = end;
 
+        // Kelurusan karena tegang HANYA untuk tampilan (keadaan simulasi tidak diubah), supaya tali mengencang halus, tidak menyentak.
+        BlendDisplayTowardsStraight(start, end);
         RebuildMesh();
         PlaceHook();
+        RestoreSimulationState();
     }
 
     private void Init()
@@ -184,12 +189,12 @@ public class VerletRopeVisual : MonoBehaviour
             Vector3 cur = pos[i];
             Vector3 vel = (cur - prev[i]) * damping;
 
-            // Bagian tali yang mengapung di air: redam gerak datar dan terbawa arus
+            // Bagian tali yang mengapung di air: redam gerak datar dan terbawa arus (laju seimbang = flowVel)
             if (floorOn && cur.y <= floorY + 0.02f)
             {
-                vel.x *= surfaceDamping;
-                vel.z *= surfaceDamping;
-                vel += flowVel * dt;
+                Vector3 flowStep = flowVel * dt;
+                vel.x = Mathf.Lerp(flowStep.x, vel.x, surfaceDamping);
+                vel.z = Mathf.Lerp(flowStep.z, vel.z, surfaceDamping);
             }
 
             prev[i] = cur;
@@ -198,6 +203,9 @@ public class VerletRopeVisual : MonoBehaviour
 
         pos[0] = start; prev[0] = start;
         pos[last] = end; prev[last] = end;
+
+        // Arahkan bentuk lengkung sebelum solver jarak & kelenturan agar segmen tidak mematah
+        ApplyArcShape(start, end, rest, floorY, floorOn);
 
         // 2) Jaga panjang tiap segmen (ujung tidak bergeser)
         for (int it = 0; it < constraintIterations; it++)
@@ -232,9 +240,6 @@ public class VerletRopeVisual : MonoBehaviour
                 }
             }
         }
-
-        ApplyArcShape(start, end, rest, floorY, floorOn);
-        ApplyTautness(start, end);
     }
 
     // Permukaan air & arus di tengah tali (dibaca dari sungai utama)
@@ -284,7 +289,7 @@ public class VerletRopeVisual : MonoBehaviour
     }
 
     // Tali kendor yang mengapung membentuk lengkung halus (busur) yang condong ke hilir arus,
-    // bukan zig-zag. Hanya bagian yang menyentuh air yang diarahkan ke bentuk ini.
+    // bukan zig-zag. Transisi halus dari udara ke permukaan air.
     private void ApplyArcShape(Vector3 start, Vector3 end, float rest, float floorY, bool floorOn)
     {
         if (arcShapeStrength <= 0f || !floorOn) return;
@@ -306,34 +311,51 @@ public class VerletRopeVisual : MonoBehaviour
         if (flowVel.sqrMagnitude > 1e-4f)
         {
             float dot = Vector3.Dot(perp, flowVel.normalized);
-            if (Mathf.Abs(dot) > 0.15f) bowSign = Mathf.Sign(dot);   // condong ke hilir
+            if (Mathf.Abs(dot) > 0.15f)
+                bowSign = Mathf.MoveTowards(bowSign, Mathf.Sign(dot), 3f * FixedStep);   // condong ke hilir secara halus
         }
 
         float k = arcShapeStrength * (1f - taut);
         for (int i = 1; i < last; i++)
         {
-            if (pos[i].y > floorY + 0.05f) continue;   // bagian di udara tetap kena gravitasi
+            float waterFactor = Mathf.Clamp01(1f - (pos[i].y - floorY) / 0.8f);
+            if (waterFactor <= 0.001f) continue;   // bagian tinggi di udara tetap kena gravitasi
 
             float u = i / (float)last;
             Vector3 target = Vector3.Lerp(start, end, u) + perp * (bowSign * A * 4f * u * (1f - u));
             Vector3 delta = target - pos[i];
             delta.y = 0f;
-            pos[i] += delta * k;
+
+            Vector3 shift = delta * (k * waterFactor);
+            pos[i] += shift;
+            prev[i] += shift * 0.8f;
         }
     }
 
-    // (dipanggil di akhir Step) tarik tali ke garis lurus sesuai tingkat ketegangan
-    private void ApplyTautness(Vector3 start, Vector3 end)
+    // Tampilan saja: geser titik tali ke garis lurus sesuai tautness (halus), simpan keadaan simulasi untuk dipulihkan
+    private void BlendDisplayTowardsStraight(Vector3 start, Vector3 end)
     {
+        displayBlended = false;
         if (taut <= 0.001f) return;
 
+        if (simBackup == null || simBackup.Length != particleCount) simBackup = new Vector3[particleCount];
+
+        float blend = taut * taut * (3f - 2f * taut);
         int last = particleCount - 1;
-        for (int i = 1; i < last; i++)
+        for (int i = 0; i <= last; i++)
         {
+            simBackup[i] = pos[i];
             Vector3 straight = Vector3.Lerp(start, end, i / (float)last);
-            pos[i] = Vector3.Lerp(pos[i], straight, taut);
-            prev[i] = Vector3.Lerp(prev[i], pos[i], taut);   // redam gerak sisa
+            pos[i] = Vector3.Lerp(pos[i], straight, blend);
         }
+        displayBlended = true;
+    }
+
+    private void RestoreSimulationState()
+    {
+        if (!displayBlended) return;
+        for (int i = 0; i < particleCount; i++) pos[i] = simBackup[i];
+        displayBlended = false;
     }
 
     private void BuildStaticMeshData()

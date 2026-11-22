@@ -65,6 +65,8 @@ public class PlayerMovement : NetworkBehaviour
         netHidden.OnValueChanged += OnHiddenChanged;
         SetRenderersVisible(!netHidden.Value);
 
+        IgnoreCollisionWithRiver();
+
         BoatController boat = FindFirstObjectByType<BoatController>();
 
         if (boat != null)
@@ -102,12 +104,33 @@ public class PlayerMovement : NetworkBehaviour
         }
     }
 
+    private void IgnoreCollisionWithRiver()
+    {
+        if (river == null && !riverSearched)
+        {
+            riverSearched = true;
+            river = RiverPath.Main;
+        }
+        if (river == null) return;
+
+        Collider[] playerColliders = GetComponentsInChildren<Collider>();
+        Collider[] riverColliders = river.GetComponentsInChildren<Collider>();
+
+        foreach (Collider pCol in playerColliders)
+        {
+            foreach (Collider rCol in riverColliders)
+            {
+                Physics.IgnoreCollision(pCol, rCol, true);
+            }
+        }
+    }
+
     private void Update()
     {
         if (!IsSpawned || !IsOwner) return;
 
-        // Cegah input jalan WASD saat sedang membidik, melempar, menarik, menunggu laso kembali, atau respawn
-        if (Application.isFocused && !isMovementLocked && !respawnLocked)
+        // Cegah input jalan WASD saat membidik/menarik laso, respawn, atau sedang jatuh dari kapal
+        if (Application.isFocused && !isMovementLocked && !respawnLocked && !isFallingOff)
         {
             HandleMovement();
         }
@@ -198,6 +221,11 @@ public class PlayerMovement : NetworkBehaviour
         rb.interpolation = IsOwner ? RigidbodyInterpolation.Interpolate : RigidbodyInterpolation.None;
 
         if (!IsOwner) return;
+
+        // Pastikan gravitasi aktif dan sumbu Y tidak terkunci
+        rb.useGravity = true;
+        rb.constraints &= ~RigidbodyConstraints.FreezePositionY;
+        IgnoreCollisionWithRiver();
 
         BoatController boat = FindFirstObjectByType<BoatController>();
         if (boat == null) return;
