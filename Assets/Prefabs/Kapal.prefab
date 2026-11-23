@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 5472306600719619065}
   - component: {fileID: 5720536896194077613}
   - component: {fileID: 8817039392071499313}
+  - component: {fileID: 6087982959539739485}
   m_Layer: 0
   m_Name: Kapal
   m_TagString: Untagged
@@ -83,14 +84,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2076413232
+  GlobalObjectIdHash: 3270352215
   InScenePlacedSourceGlobalObjectIdHash: 2076413232
   m_InScenePlacedDisabledByDefault: 0
   DeferredDespawnTick: 0
   Ownership: 1
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
-  m_InScenePlaced: 0
+  m_InScenePlaced: 1
   ActiveSceneSynchronization: 0
   SceneMigrationSynchronization: 0
   SpawnWithObservers: 1
@@ -197,10 +198,27 @@ MonoBehaviour:
   headingOffsetDegrees: 0
   flowAlignResponsiveness: 0.6
   flowAlignMaxTurnRad: 0.5
-  keepInsideBanks: 0
+  keepInsideBanks: 1
   bankMargin: 1
   bankPushAccel: 8
   slipperyHull: 1
+--- !u!114 &6087982959539739485
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2703555120985971670}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6000b1c43b58cac49a8cd56f27145b3d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BoatImpactBroadcaster
+  ShowTopMostFoldoutHeaderGroup: 1
+  minImpactSpeed: 0.8
+  maxImpactSpeed: 4.8
+  impactCooldown: 0.35
+  impactSfxId: 
 --- !u!1 &4866565991708395650
 GameObject:
   m_ObjectHideFlags: 0
@@ -316,7 +334,7 @@ Transform:
   m_GameObject: {fileID: 5212991395054335827}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.94, y: 1.5, z: -0.96}
+  m_LocalPosition: {x: 0.94, y: 0.97, z: -0.96}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -351,8 +369,8 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 10, y: 0.5, z: 10}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 7, y: 0.35, z: 7}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 4707081232070679526}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -459,7 +477,7 @@ Transform:
   m_GameObject: {fileID: 5525642128423427759}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -0.76, y: 1.5, z: -2}
+  m_LocalPosition: {x: -0.76, y: 0.97, z: -2}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -634,7 +652,7 @@ Transform:
   m_GameObject: {fileID: 8286588776935201461}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -0.6, y: 1.5, z: 2}
+  m_LocalPosition: {x: -0.6, y: 0.97, z: 2}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -665,7 +683,7 @@ Transform:
   m_GameObject: {fileID: 8340831742739500177}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.92, y: 1.5, z: 1.12}
+  m_LocalPosition: {x: 0.92, y: 0.97, z: 1.12}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

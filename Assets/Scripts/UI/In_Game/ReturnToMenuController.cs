@@ -86,6 +86,13 @@ public class ReturnToMenuController : MonoBehaviour
         }
 
         // 2. Pindah ke Main Menu secara lokal (hanya untuk pemain ini)
-        SceneManager.LoadScene(mainMenuSceneName);
+        if (SceneFadeTransition.Instance != null)
+        {
+            SceneFadeTransition.Instance.TransitionToScene(mainMenuSceneName);
+        }
+        else
+        {
+            SceneManager.LoadScene(mainMenuSceneName);
+        }
     }
 }
