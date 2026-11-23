@@ -213,7 +213,7 @@ public class MainMenuController : MonoBehaviour
 
             if (NetworkManager.Singleton.StartHost())
             {
-                textCode.text = $"Code: {joinCode}";
+                textCode.text = $"{joinCode}";
                 buttonPlayGame.gameObject.SetActive(true);
                 ShowPanel(panelHost);
                 UpdateLobbyPlayerListUI();
@@ -261,7 +261,7 @@ public class MainMenuController : MonoBehaviour
 
             if (NetworkManager.Singleton.StartClient())
             {
-                textCode.text = $"Code: {joinCode}";
+                textCode.text = $"{joinCode}";
                 buttonPlayGame.gameObject.SetActive(false);
                 ShowPanel(panelHost);
                 UpdateLobbyPlayerListUI();
