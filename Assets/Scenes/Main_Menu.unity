@@ -422,6 +422,7 @@ GameObject:
   - component: {fileID: 40127715}
   - component: {fileID: 40127714}
   - component: {fileID: 40127713}
+  - component: {fileID: 40127716}
   m_Layer: 5
   m_Name: InputField_Code
   m_TagString: Untagged
@@ -588,6 +589,23 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 40127711}
   m_CullTransparentMesh: 1
+--- !u!114 &40127716
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 40127711}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b323e55aa89f27c4980597f63d3f335f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIInputFieldJuice
+  focusScale: 1.035
+  scaleSpeed: 16
+  shakeDuration: 0.28
+  shakeMagnitude: 12
+  errorFlashColor: {r: 1, g: 0.45, b: 0.45, a: 1}
 --- !u!1 &49986473
 GameObject:
   m_ObjectHideFlags: 0
@@ -600,6 +618,7 @@ GameObject:
   - component: {fileID: 49986477}
   - component: {fileID: 49986476}
   - component: {fileID: 49986475}
+  - component: {fileID: 49986478}
   m_Layer: 5
   m_Name: Button_Join
   m_TagString: Untagged
@@ -708,6 +727,30 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 49986473}
   m_CullTransparentMesh: 1
+--- !u!114 &49986478
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 49986473}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 285bd769f8a541a4e8a4abe675801c4d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIButtonJuice
+  hoverScale: 1.05
+  pressedScale: 0.96
+  hoverTiltZ: 1
+  animSpeed: 16
+  pressOffsetY: -4
+  hoverOffsetX: 0
+  clickSpinZ: 0
+  enableUnlockBounce: 1
+  disabledAlpha: 0.52
+  enableIdlePulse: 0
+  pulseAmplitude: 0.03
+  pulseFrequency: 0.55
 --- !u!1 &132057519
 GameObject:
   m_ObjectHideFlags: 0
@@ -856,6 +899,7 @@ GameObject:
   - component: {fileID: 155772778}
   - component: {fileID: 155772780}
   - component: {fileID: 155772779}
+  - component: {fileID: 155772781}
   m_Layer: 5
   m_Name: Panel_Host
   m_TagString: Untagged
@@ -896,7 +940,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.36078432, g: 0.28627452, b: 0.23137257, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 0}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -921,6 +965,27 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 155772777}
   m_CullTransparentMesh: 1
+--- !u!114 &155772781
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 155772777}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3d704bcf7bd2c68488110694632904f4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LobbyUIJuice
+  codeText: {fileID: 622770829}
+  copiedToastText: {fileID: 0}
+  copiedToastColor: {r: 0.24, g: 0.52, b: 0.28, a: 1}
+  playerTexts:
+  - {fileID: 1985557397}
+  - {fileID: 132057522}
+  - {fileID: 780841250}
+  - {fileID: 2468244}
+  waitingDotInterval: 0.45
 --- !u!1 &160776119
 GameObject:
   m_ObjectHideFlags: 0
@@ -1629,7 +1694,13 @@ MonoBehaviour:
   hoverTiltZ: 0
   animSpeed: 16
   pressOffsetY: -5
+  hoverOffsetX: 0
   clickSpinZ: 0
+  enableUnlockBounce: 0
+  disabledAlpha: 0.52
+  enableIdlePulse: 0
+  pulseAmplitude: 0.03
+  pulseFrequency: 0.55
 --- !u!1 &407320510
 GameObject:
   m_ObjectHideFlags: 0
@@ -1768,7 +1839,13 @@ MonoBehaviour:
   hoverTiltZ: 1
   animSpeed: 16
   pressOffsetY: -5
+  hoverOffsetX: 0
   clickSpinZ: 0
+  enableUnlockBounce: 0
+  disabledAlpha: 0.52
+  enableIdlePulse: 0
+  pulseAmplitude: 0.03
+  pulseFrequency: 0.55
 --- !u!1 &488866008
 GameObject:
   m_ObjectHideFlags: 0
@@ -1894,6 +1971,7 @@ GameObject:
   - component: {fileID: 622770828}
   - component: {fileID: 622770830}
   - component: {fileID: 622770829}
+  - component: {fileID: 622770831}
   m_Layer: 5
   m_Name: Text_Code
   m_TagString: Untagged
@@ -2020,6 +2098,30 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 622770827}
   m_CullTransparentMesh: 1
+--- !u!114 &622770831
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 622770827}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 285bd769f8a541a4e8a4abe675801c4d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIButtonJuice
+  hoverScale: 1.06
+  pressedScale: 0.95
+  hoverTiltZ: 0
+  animSpeed: 16
+  pressOffsetY: 0
+  hoverOffsetX: 0
+  clickSpinZ: 0
+  enableUnlockBounce: 0
+  disabledAlpha: 0.52
+  enableIdlePulse: 0
+  pulseAmplitude: 0.03
+  pulseFrequency: 0.55
 --- !u!1 &631638240
 GameObject:
   m_ObjectHideFlags: 0
@@ -2336,7 +2438,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.3647059, g: 0.28627452, b: 0.23529413, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 0}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -2647,6 +2749,7 @@ GameObject:
   - component: {fileID: 820978195}
   - component: {fileID: 820978194}
   - component: {fileID: 820978193}
+  - component: {fileID: 820978196}
   m_Layer: 5
   m_Name: Button_Exit
   m_TagString: Untagged
@@ -2755,6 +2858,30 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 820978191}
   m_CullTransparentMesh: 1
+--- !u!114 &820978196
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 820978191}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 285bd769f8a541a4e8a4abe675801c4d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIButtonJuice
+  hoverScale: 1.08
+  pressedScale: 0.93
+  hoverTiltZ: 0
+  animSpeed: 16
+  pressOffsetY: 0
+  hoverOffsetX: -4
+  clickSpinZ: 0
+  enableUnlockBounce: 0
+  disabledAlpha: 0.52
+  enableIdlePulse: 0
+  pulseAmplitude: 0.03
+  pulseFrequency: 0.55
 --- !u!1 &865150541
 GameObject:
   m_ObjectHideFlags: 0
@@ -2809,7 +2936,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.3647059, g: 0.2901961, b: 0.2392157, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 0}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -3064,8 +3191,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4278190080
-  m_fontColor: {r: 0, g: 0, b: 0, a: 1}
+    rgba: 2113929216
+  m_fontColor: {r: 0, g: 0, b: 0, a: 0.49411765}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -3294,6 +3421,7 @@ GameObject:
   - component: {fileID: 1046609191}
   - component: {fileID: 1046609190}
   - component: {fileID: 1046609189}
+  - component: {fileID: 1046609192}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -3377,6 +3505,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1157586150}
+  - {fileID: 1714675831}
   - {fileID: 865150542}
   - {fileID: 1350581780}
   - {fileID: 761123813}
@@ -3407,6 +3536,9 @@ MonoBehaviour:
   panelSelection: {fileID: 865150541}
   panelHost: {fileID: 155772777}
   panelJoin: {fileID: 761123812}
+  panelTransitioner: {fileID: 1046609192}
+  codeInputJuice: {fileID: 40127716}
+  lobbyUIJuice: {fileID: 155772781}
   buttonPlaySolo: {fileID: 1534215957}
   buttonPlayMultiplayer: {fileID: 407320512}
   inputFieldNama: {fileID: 1444097497}
@@ -3515,6 +3647,26 @@ MonoBehaviour:
     startScale: 0
     startRotationZ: -90
     useBounce: 1
+--- !u!114 &1046609192
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1046609182}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 804fddd74f683f7479fd748f10f5906a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MenuPanelTransitioner
+  sharedBackdrop: {fileID: 1714675828}
+  backdropFadeDuration: 0.18
+  exitDuration: 0.14
+  enterDuration: 0.24
+  slideDistanceX: 90
+  riseDistanceY: 120
+  plantSignDistanceY: 220
+  riseTiltZ: -3
 --- !u!1 &1079900542
 GameObject:
   m_ObjectHideFlags: 0
@@ -4666,6 +4818,7 @@ GameObject:
   - component: {fileID: 1444097499}
   - component: {fileID: 1444097498}
   - component: {fileID: 1444097497}
+  - component: {fileID: 1444097500}
   m_Layer: 5
   m_Name: InputField_Nama
   m_TagString: Untagged
@@ -4832,6 +4985,23 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1444097495}
   m_CullTransparentMesh: 1
+--- !u!114 &1444097500
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1444097495}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b323e55aa89f27c4980597f63d3f335f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIInputFieldJuice
+  focusScale: 1.035
+  scaleSpeed: 16
+  shakeDuration: 0.28
+  shakeMagnitude: 12
+  errorFlashColor: {r: 1, g: 0.45, b: 0.45, a: 1}
 --- !u!1 &1501106688
 GameObject:
   m_ObjectHideFlags: 0
@@ -4844,6 +5014,7 @@ GameObject:
   - component: {fileID: 1501106692}
   - component: {fileID: 1501106691}
   - component: {fileID: 1501106690}
+  - component: {fileID: 1501106693}
   m_Layer: 5
   m_Name: Button_Exit
   m_TagString: Untagged
@@ -4952,6 +5123,30 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1501106688}
   m_CullTransparentMesh: 1
+--- !u!114 &1501106693
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1501106688}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 285bd769f8a541a4e8a4abe675801c4d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIButtonJuice
+  hoverScale: 1.08
+  pressedScale: 0.93
+  hoverTiltZ: 0
+  animSpeed: 16
+  pressOffsetY: 0
+  hoverOffsetX: -4
+  clickSpinZ: 0
+  enableUnlockBounce: 0
+  disabledAlpha: 0.52
+  enableIdlePulse: 0
+  pulseAmplitude: 0.03
+  pulseFrequency: 0.55
 --- !u!1 &1509340579
 GameObject:
   m_ObjectHideFlags: 0
@@ -5297,7 +5492,13 @@ MonoBehaviour:
   hoverTiltZ: 1
   animSpeed: 16
   pressOffsetY: -5
+  hoverOffsetX: 0
   clickSpinZ: 0
+  enableUnlockBounce: 0
+  disabledAlpha: 0.52
+  enableIdlePulse: 0
+  pulseAmplitude: 0.03
+  pulseFrequency: 0.55
 --- !u!1 &1652128533
 GameObject:
   m_ObjectHideFlags: 0
@@ -5385,6 +5586,7 @@ GameObject:
   - component: {fileID: 1665284116}
   - component: {fileID: 1665284115}
   - component: {fileID: 1665284114}
+  - component: {fileID: 1665284117}
   m_Layer: 5
   m_Name: Button_Host
   m_TagString: Untagged
@@ -5493,6 +5695,105 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1665284112}
   m_CullTransparentMesh: 1
+--- !u!114 &1665284117
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1665284112}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 285bd769f8a541a4e8a4abe675801c4d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIButtonJuice
+  hoverScale: 1.05
+  pressedScale: 0.96
+  hoverTiltZ: 1
+  animSpeed: 16
+  pressOffsetY: -4
+  hoverOffsetX: 0
+  clickSpinZ: 0
+  enableUnlockBounce: 0
+  disabledAlpha: 0.52
+  enableIdlePulse: 0
+  pulseAmplitude: 0.03
+  pulseFrequency: 0.55
+--- !u!1 &1714675828
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1714675831}
+  - component: {fileID: 1714675830}
+  - component: {fileID: 1714675829}
+  m_Layer: 5
+  m_Name: MultiplayerBackdrop
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1714675829
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1714675828}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 0.29411766, g: 0.23529413, b: 0.18431373, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &1714675830
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1714675828}
+  m_CullTransparentMesh: 1
+--- !u!224 &1714675831
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1714675828}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1046609186}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 20, y: 20}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1821600518
 GameObject:
   m_ObjectHideFlags: 0
@@ -5505,6 +5806,7 @@ GameObject:
   - component: {fileID: 1821600522}
   - component: {fileID: 1821600521}
   - component: {fileID: 1821600520}
+  - component: {fileID: 1821600523}
   m_Layer: 5
   m_Name: Button_Play
   m_TagString: Untagged
@@ -5613,6 +5915,30 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1821600518}
   m_CullTransparentMesh: 1
+--- !u!114 &1821600523
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1821600518}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 285bd769f8a541a4e8a4abe675801c4d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIButtonJuice
+  hoverScale: 1.07
+  pressedScale: 0.95
+  hoverTiltZ: 1
+  animSpeed: 16
+  pressOffsetY: -4
+  hoverOffsetX: 0
+  clickSpinZ: 0
+  enableUnlockBounce: 1
+  disabledAlpha: 0.52
+  enableIdlePulse: 0
+  pulseAmplitude: 0.03
+  pulseFrequency: 0.55
 --- !u!1 &1849478599
 GameObject:
   m_ObjectHideFlags: 0
@@ -5625,6 +5951,7 @@ GameObject:
   - component: {fileID: 1849478603}
   - component: {fileID: 1849478602}
   - component: {fileID: 1849478601}
+  - component: {fileID: 1849478604}
   m_Layer: 5
   m_Name: Button_Join
   m_TagString: Untagged
@@ -5733,6 +6060,30 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1849478599}
   m_CullTransparentMesh: 1
+--- !u!114 &1849478604
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1849478599}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 285bd769f8a541a4e8a4abe675801c4d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIButtonJuice
+  hoverScale: 1.05
+  pressedScale: 0.96
+  hoverTiltZ: 1
+  animSpeed: 16
+  pressOffsetY: -4
+  hoverOffsetX: 0
+  clickSpinZ: 0
+  enableUnlockBounce: 0
+  disabledAlpha: 0.52
+  enableIdlePulse: 0
+  pulseAmplitude: 0.03
+  pulseFrequency: 0.55
 --- !u!1 &1868770441
 GameObject:
   m_ObjectHideFlags: 0
