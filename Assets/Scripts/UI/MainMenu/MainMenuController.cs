@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Linq;
 using System.Threading.Tasks;
 using TMPro;
@@ -29,6 +30,11 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private GameObject panelHost;
     [SerializeField] private GameObject panelJoin;
 
+    [Header("Komponen Juicing UI (Opsional)")]
+    [SerializeField] private MenuPanelTransitioner panelTransitioner;
+    [SerializeField] private UIInputFieldJuice codeInputJuice;
+    [SerializeField] private LobbyUIJuice lobbyUIJuice;
+
     [Header("UI Panel Main Menu")]
     [SerializeField] private Button buttonPlaySolo;
     [SerializeField] private Button buttonPlayMultiplayer;
@@ -41,7 +47,7 @@ public class MainMenuController : MonoBehaviour
 
     [Header("UI Panel Host (Lobby)")]
     [SerializeField] private TMP_Text textCode;
-    [SerializeField] private TMP_Text[] playerTexts; // Masukkan Player1, Player2, Player3, Player4
+    [SerializeField] private TMP_Text[] playerTexts;
     [SerializeField] private Button buttonPlayGame;
     [SerializeField] private Button buttonExitHost;
 
@@ -51,10 +57,22 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private Button buttonExitJoin;
 
     private bool isServicesInitialized = false;
+    private Coroutine loadingDotsCoroutine;
 
     private async void Start()
     {
-        ShowPanel(panelMainMenu);
+        if (panelTransitioner != null)
+        {
+            panelTransitioner.SetInitialPanel(
+                panelMainMenu,
+                new[] { panelMainMenu, panelSelection, panelHost, panelJoin },
+                false
+            );
+        }
+        else
+        {
+            ShowPanelInstant(panelMainMenu);
+        }
 
         // Setup Listener Panel Main Menu
         buttonPlaySolo.onClick.AddListener(StartSoloGame);
@@ -64,7 +82,8 @@ public class MainMenuController : MonoBehaviour
         inputFieldNama.onValueChanged.AddListener(ValidateNameInput);
         buttonHost.onClick.AddListener(() => _ = StartHostMultiplayerAsync());
         buttonJoinSelection.onClick.AddListener(OpenJoinPanel);
-        buttonExitSelection.onClick.AddListener(() => ShowPanel(panelMainMenu));
+        buttonExitSelection.onClick.AddListener(() =>
+            SwitchPanel(panelMainMenu, MenuPanelTransitioner.TransitionStyle.DropOut, false));
 
         // Setup Listener Panel Host
         buttonPlayGame.onClick.AddListener(StartMultiplayerMatch);
@@ -73,7 +92,8 @@ public class MainMenuController : MonoBehaviour
         // Setup Listener Panel Join
         inputFieldCode.onValueChanged.AddListener(ValidateCodeInput);
         buttonJoinRoom.onClick.AddListener(() => _ = StartClientMultiplayerAsync());
-        buttonExitJoin.onClick.AddListener(() => ShowPanel(panelSelection));
+        buttonExitJoin.onClick.AddListener(() =>
+            SwitchPanel(panelSelection, MenuPanelTransitioner.TransitionStyle.SlideFromLeft, true));
 
         ValidateNameInput(inputFieldNama.text);
         ValidateCodeInput(inputFieldCode.text);
@@ -122,7 +142,19 @@ public class MainMenuController : MonoBehaviour
 
     // --- NAVIGASI PANEL & VALIDASI ---
 
-    private void ShowPanel(GameObject activePanel)
+    private void SwitchPanel(GameObject targetPanel, MenuPanelTransitioner.TransitionStyle style, bool showBackdrop)
+    {
+        if (panelTransitioner != null)
+        {
+            panelTransitioner.TransitionTo(targetPanel, style, showBackdrop);
+        }
+        else
+        {
+            ShowPanelInstant(targetPanel);
+        }
+    }
+
+    private void ShowPanelInstant(GameObject activePanel)
     {
         panelMainMenu.SetActive(activePanel == panelMainMenu);
         panelSelection.SetActive(activePanel == panelSelection);
@@ -133,7 +165,7 @@ public class MainMenuController : MonoBehaviour
     private void OpenSelectionPanel()
     {
         ValidateNameInput(inputFieldNama.text);
-        ShowPanel(panelSelection);
+        SwitchPanel(panelSelection, MenuPanelTransitioner.TransitionStyle.RiseTilt, true);
     }
 
     private void OpenJoinPanel()
@@ -141,7 +173,7 @@ public class MainMenuController : MonoBehaviour
         LocalPlayerName = inputFieldNama.text.Trim();
         inputFieldCode.text = string.Empty;
         ValidateCodeInput(string.Empty);
-        ShowPanel(panelJoin);
+        SwitchPanel(panelJoin, MenuPanelTransitioner.TransitionStyle.SlideFromRight, true);
     }
 
     private void ValidateNameInput(string currentName)
@@ -161,8 +193,50 @@ public class MainMenuController : MonoBehaviour
 #if UNITY_EDITOR
         return useRelayInEditor;
 #else
-        return true; // Saat Build (WebGL / Standalone), selalu gunakan Relay
+        return true;
 #endif
+    }
+
+    // --- ANIMASI LOADING DOTS SAAT MENUNGGU RELAY ---
+
+    private TMP_Text StartButtonLoading(Button targetButton, out string originalLabel)
+    {
+        TMP_Text label = targetButton.GetComponentInChildren<TMP_Text>();
+        originalLabel = label != null ? label.text : string.Empty;
+
+        if (label != null)
+        {
+            if (loadingDotsCoroutine != null) StopCoroutine(loadingDotsCoroutine);
+            loadingDotsCoroutine = StartCoroutine(LoadingDotsRoutine(label));
+        }
+
+        return label;
+    }
+
+    private void StopButtonLoading(TMP_Text label, string originalLabel)
+    {
+        if (loadingDotsCoroutine != null)
+        {
+            StopCoroutine(loadingDotsCoroutine);
+            loadingDotsCoroutine = null;
+        }
+
+        if (label != null)
+        {
+            label.text = originalLabel;
+        }
+    }
+
+    private IEnumerator LoadingDotsRoutine(TMP_Text label)
+    {
+        string[] frames = { "LOADING.", "LOADING..", "LOADING..." };
+        int idx = 0;
+        while (true)
+        {
+            label.text = frames[idx];
+            idx = (idx + 1) % frames.Length;
+            yield return new WaitForSecondsRealtime(0.28f);
+        }
     }
 
     // --- LOGIKA SOLO ---
@@ -184,7 +258,6 @@ public class MainMenuController : MonoBehaviour
             }
             else
             {
-                // Pengaman: buka kembali layar jika StartHost gagal
                 buttonPlaySolo.interactable = true;
                 SceneFadeTransition.Instance?.CancelAndFadeIn();
             }
@@ -206,6 +279,8 @@ public class MainMenuController : MonoBehaviour
     {
         LocalPlayerName = inputFieldNama.text.Trim();
         buttonHost.interactable = false;
+        buttonJoinSelection.interactable = false;
+        TMP_Text hostLabel = StartButtonLoading(buttonHost, out string originalText);
 
         try
         {
@@ -225,22 +300,32 @@ public class MainMenuController : MonoBehaviour
             }
             else
             {
-                // Mode Testing Lokal Editor (Bebas Error Burst TLS)
                 transport.UseWebSockets = false;
                 transport.SetConnectionData("127.0.0.1", 7777);
             }
+
+            lobbyUIJuice?.ResetSlots();
 
             if (NetworkManager.Singleton.StartHost())
             {
                 textCode.text = $"{joinCode}";
                 buttonPlayGame.gameObject.SetActive(true);
-                ShowPanel(panelHost);
+                SwitchPanel(panelHost, MenuPanelTransitioner.TransitionStyle.PlantSign, true);
                 UpdateLobbyPlayerListUI();
+            }
+            else
+            {
+                ValidateNameInput(inputFieldNama.text);
             }
         }
         catch (Exception e)
         {
             Debug.LogError($"Gagal membuat Host: {e.Message}");
+            ValidateNameInput(inputFieldNama.text);
+        }
+        finally
+        {
+            StopButtonLoading(hostLabel, originalText);
         }
     }
 
@@ -256,6 +341,7 @@ public class MainMenuController : MonoBehaviour
     {
         string joinCode = inputFieldCode.text.Trim().ToUpper();
         buttonJoinRoom.interactable = false;
+        TMP_Text joinLabel = StartButtonLoading(buttonJoinRoom, out string originalText);
 
         try
         {
@@ -273,23 +359,34 @@ public class MainMenuController : MonoBehaviour
             }
             else
             {
-                // Mode Testing Lokal Editor (Ketik kode apa saja minimal 4 huruf, misal LOCAL1)
                 transport.UseWebSockets = false;
                 transport.SetConnectionData("127.0.0.1", 7777);
             }
+
+            lobbyUIJuice?.ResetSlots();
 
             if (NetworkManager.Singleton.StartClient())
             {
                 textCode.text = $"{joinCode}";
                 buttonPlayGame.gameObject.SetActive(false);
-                ShowPanel(panelHost);
+                SwitchPanel(panelHost, MenuPanelTransitioner.TransitionStyle.PlantSign, true);
                 UpdateLobbyPlayerListUI();
+            }
+            else
+            {
+                codeInputJuice?.PlayErrorShake();
+                ValidateCodeInput(inputFieldCode.text);
             }
         }
         catch (Exception e)
         {
             Debug.LogError($"Gagal Join Room: {e.Message}");
+            codeInputJuice?.PlayErrorShake();
             ValidateCodeInput(inputFieldCode.text);
+        }
+        finally
+        {
+            StopButtonLoading(joinLabel, originalText);
         }
     }
 
@@ -308,11 +405,18 @@ public class MainMenuController : MonoBehaviour
                 string pName = players[i].PlayerName.ToString();
                 if (players[i].IsHost)
                 {
-                    pName += " (Host)"; // Pastikan tidak ada karakter \n (enter) di sini
+                    pName += " (Host)";
                 }
-                playerTexts[i].text = pName;
 
-                // Tampilkan tombol Play hanya jika kita adalah Host saat ini
+                if (lobbyUIJuice != null)
+                {
+                    lobbyUIJuice.UpdatePlayerSlot(i, true, pName);
+                }
+                else
+                {
+                    playerTexts[i].text = pName;
+                }
+
                 if (players[i].ClientId == NetworkManager.Singleton.LocalClientId)
                 {
                     buttonPlayGame.gameObject.SetActive(players[i].IsHost);
@@ -320,7 +424,14 @@ public class MainMenuController : MonoBehaviour
             }
             else
             {
-                playerTexts[i].text = "Waiting for player...";
+                if (lobbyUIJuice != null)
+                {
+                    lobbyUIJuice.UpdatePlayerSlot(i, false, string.Empty);
+                }
+                else
+                {
+                    playerTexts[i].text = "Waiting for player...";
+                }
             }
         }
     }
@@ -334,7 +445,6 @@ public class MainMenuController : MonoBehaviour
 
         if (SceneFadeTransition.Instance != null)
         {
-            // Minta semua Client ikut menggelapkan layar secara bersamaan
             NetworkLobbyManager.Instance?.NotifyClientsToFadeOut();
 
             SceneFadeTransition.Instance.FadeOutAndInvoke(() =>
@@ -353,26 +463,24 @@ public class MainMenuController : MonoBehaviour
 
     private async void LeaveLobby()
     {
-        // Matikan tombol interaksi agar tidak diklik dua kali
         buttonExitHost.interactable = false;
 
         if (NetworkManager.Singleton != null && (NetworkManager.Singleton.IsConnectedClient || NetworkManager.Singleton.IsHost))
         {
             NetworkManager.Singleton.Shutdown();
 
-            // Tunggu sampai NetworkManager benar-benar mati
             while (NetworkManager.Singleton.IsListening)
             {
                 await Task.Yield();
             }
         }
 
+        lobbyUIJuice?.ResetSlots();
         UpdateLobbyPlayerListUI();
-        ShowPanel(panelSelection);
+        SwitchPanel(panelSelection, MenuPanelTransitioner.TransitionStyle.DropOut, true);
 
-        // Nyalakan tombol kembali untuk penggunaan berikutnya
         buttonExitHost.interactable = true;
-        buttonHost.interactable = true;
+        ValidateNameInput(inputFieldNama.text);
     }
 
     private void OnClientConnected(ulong clientId)
@@ -384,21 +492,20 @@ public class MainMenuController : MonoBehaviour
     {
         if (clientId == NetworkManager.Singleton.LocalClientId || clientId == NetworkManager.ServerClientId)
         {
-            SceneFadeTransition.Instance?.CancelAndFadeIn();
-            buttonPlayGame.interactable = true;
-            buttonExitHost.interactable = true;
             if (NetworkLobbyManager.Instance != null && NetworkLobbyManager.Instance.LobbyPlayers != null)
             {
                 NetworkLobbyManager.Instance.LobbyPlayers.Clear();
             }
 
+            SceneFadeTransition.Instance?.CancelAndFadeIn();
+            lobbyUIJuice?.ResetSlots();
             textCode.text = string.Empty;
             UpdateLobbyPlayerListUI();
-            ShowPanel(panelSelection);
+            SwitchPanel(panelSelection, MenuPanelTransitioner.TransitionStyle.DropOut, true);
 
-            // Pastikan tombol bisa ditekan lagi
-            buttonHost.interactable = true;
-            buttonJoinSelection.interactable = true;
+            buttonPlayGame.interactable = true;
+            buttonExitHost.interactable = true;
+            ValidateNameInput(inputFieldNama.text);
         }
         else
         {
