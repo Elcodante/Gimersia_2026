@@ -169,15 +169,34 @@ public class MainMenuController : MonoBehaviour
 
     private void StartSoloGame()
     {
+        buttonPlaySolo.interactable = false;
         LocalPlayerName = "Solo Player";
 
-        var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
-        transport.UseWebSockets = false;
-        transport.SetConnectionData("127.0.0.1", 7777);
-
-        if (NetworkManager.Singleton.StartHost())
+        Action launchSolo = () =>
         {
-            NetworkManager.Singleton.SceneManager.LoadScene(gameSceneName, LoadSceneMode.Single);
+            var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            transport.UseWebSockets = false;
+            transport.SetConnectionData("127.0.0.1", 7777);
+
+            if (NetworkManager.Singleton.StartHost())
+            {
+                NetworkManager.Singleton.SceneManager.LoadScene(gameSceneName, LoadSceneMode.Single);
+            }
+            else
+            {
+                // Pengaman: buka kembali layar jika StartHost gagal
+                buttonPlaySolo.interactable = true;
+                SceneFadeTransition.Instance?.CancelAndFadeIn();
+            }
+        };
+
+        if (SceneFadeTransition.Instance != null)
+        {
+            SceneFadeTransition.Instance.FadeOutAndInvoke(launchSolo);
+        }
+        else
+        {
+            launchSolo.Invoke();
         }
     }
 
@@ -308,7 +327,25 @@ public class MainMenuController : MonoBehaviour
 
     private void StartMultiplayerMatch()
     {
-        if (NetworkManager.Singleton.IsHost)
+        if (!NetworkManager.Singleton.IsHost) return;
+
+        buttonPlayGame.interactable = false;
+        buttonExitHost.interactable = false;
+
+        if (SceneFadeTransition.Instance != null)
+        {
+            // Minta semua Client ikut menggelapkan layar secara bersamaan
+            NetworkLobbyManager.Instance?.NotifyClientsToFadeOut();
+
+            SceneFadeTransition.Instance.FadeOutAndInvoke(() =>
+            {
+                if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
+                {
+                    NetworkManager.Singleton.SceneManager.LoadScene(gameSceneName, LoadSceneMode.Single);
+                }
+            });
+        }
+        else
         {
             NetworkManager.Singleton.SceneManager.LoadScene(gameSceneName, LoadSceneMode.Single);
         }
@@ -347,6 +384,9 @@ public class MainMenuController : MonoBehaviour
     {
         if (clientId == NetworkManager.Singleton.LocalClientId || clientId == NetworkManager.ServerClientId)
         {
+            SceneFadeTransition.Instance?.CancelAndFadeIn();
+            buttonPlayGame.interactable = true;
+            buttonExitHost.interactable = true;
             if (NetworkLobbyManager.Instance != null && NetworkLobbyManager.Instance.LobbyPlayers != null)
             {
                 NetworkLobbyManager.Instance.LobbyPlayers.Clear();

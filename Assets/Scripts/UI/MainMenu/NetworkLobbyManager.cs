@@ -111,4 +111,23 @@ public class NetworkLobbyManager : NetworkBehaviour
     {
         OnLobbyUpdated?.Invoke();
     }
+
+    public void NotifyClientsToFadeOut()
+    {
+        if (IsServer)
+        {
+            PlayFadeOutClientRpc();
+        }
+    }
+
+    [Rpc(SendTo.NotServer)]
+    private void PlayFadeOutClientRpc()
+    {
+        if (SceneFadeTransition.Instance != null)
+        {
+            // Null karena perpindahan scene tetap dikendalikan oleh Host;
+            // layar akan otomatis terang kembali begitu scene In_Game_Raka selesai dimuat.
+            SceneFadeTransition.Instance.FadeOutAndInvoke(null);
+        }
+    }
 }
