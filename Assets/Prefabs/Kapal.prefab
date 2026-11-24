@@ -218,7 +218,7 @@ MonoBehaviour:
   minImpactSpeed: 0.8
   maxImpactSpeed: 4.8
   impactCooldown: 0.35
-  impactSfxId: 
+  impactSfxId: boat_impact
 --- !u!1 &4866565991708395650
 GameObject:
   m_ObjectHideFlags: 0

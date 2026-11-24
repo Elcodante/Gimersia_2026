@@ -2118,7 +2118,7 @@ MonoBehaviour:
   hoverOffsetX: 0
   clickSpinZ: 0
   enableUnlockBounce: 0
-  disabledAlpha: 0.52
+  disabledAlpha: 1
   enableIdlePulse: 0
   pulseAmplitude: 0.03
   pulseFrequency: 0.55
@@ -3532,6 +3532,7 @@ MonoBehaviour:
   gameSceneName: In_Game_Raka
   maxPlayers: 4
   useRelayInEditor: 1
+  clientConnectTimeout: 12
   panelMainMenu: {fileID: 1157586149}
   panelSelection: {fileID: 865150541}
   panelHost: {fileID: 155772777}
@@ -3759,7 +3760,7 @@ MonoBehaviour:
   m_fontSizeMax: 72
   m_fontStyle: 0
   m_HorizontalAlignment: 2
-  m_VerticalAlignment: 512
+  m_VerticalAlignment: 256
   m_textAlignment: 65535
   m_characterSpacing: 0
   m_characterHorizontalScale: 1

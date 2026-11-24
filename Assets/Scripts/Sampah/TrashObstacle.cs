@@ -178,9 +178,11 @@ public class TrashObstacle : NetworkBehaviour
         {
             EnableDrift();
             TriggerShakeClientRpc();   // goyangan "lepas"
+            TriggerClearSfxClientRpc();
         }
         else
         {
+            TriggerClearSfxClientRpc();
             ClearTrash();              // tanpa hanyut: perilaku lama (hilang)
         }
     }
@@ -314,6 +316,8 @@ public class TrashObstacle : NetworkBehaviour
     [ClientRpc]
     private void TriggerShakeClientRpc()
     {
+        AudioManager.Instance?.PlaySFX("trash_tug", 0.08f);
+
         if (isCleared || !gameObject.activeInHierarchy || shakeTarget == null) return;
 
         if (shakeCoroutine != null)
@@ -321,6 +325,12 @@ public class TrashObstacle : NetworkBehaviour
             StopCoroutine(shakeCoroutine);
         }
         shakeCoroutine = StartCoroutine(ShakeRoutine());
+    }
+
+    [ClientRpc]
+    private void TriggerClearSfxClientRpc()
+    {
+        AudioManager.Instance?.PlaySFX("trash_clear", 0.05f);
     }
 
     private IEnumerator ShakeRoutine()

@@ -104,6 +104,11 @@ public class MainMenuController : MonoBehaviour
         ValidateNameInput(inputFieldNama.text);
         ValidateCodeInput(inputFieldCode.text);
 
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayBGM("bgm_main_menu");
+        }
+
         NetworkLobbyManager.OnLobbyUpdated += UpdateLobbyPlayerListUI;
         if (NetworkManager.Singleton != null)
         {

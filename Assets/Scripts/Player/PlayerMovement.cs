@@ -30,6 +30,7 @@ public class PlayerMovement : NetworkBehaviour
 
     private Rigidbody rb;
     private bool isFallingOff = false;
+    private bool remoteFallingOff = false;
     private bool isMovementLocked = false; // Dikontrol oleh LassoController
     private bool respawnLocked = false;    // Owner: terkunci selama tenggelam -> respawn -> animasi muncul
     private bool serverRespawning = false;
@@ -41,6 +42,8 @@ public class PlayerMovement : NetworkBehaviour
 
     // true = pemain tak terlihat (fase respawn). Ditulis server, dibaca semua client.
     private readonly NetworkVariable<bool> netHidden = new NetworkVariable<bool>(false);
+    // true = pemain sedang jatuh di luar kapal / menunggu respawn. Dipakai CameraTracker agar kamera tidak terpental.
+    private readonly NetworkVariable<bool> netOffBoat = new NetworkVariable<bool>(false);
 
     private Renderer[] hideRenderers = new Renderer[0];
     private Transform[] resolvedTargets = new Transform[0];
@@ -49,6 +52,9 @@ public class PlayerMovement : NetworkBehaviour
 
     /// <summary>True selama pemain tenggelam / respawn / belum terlihat. Dipakai LassoController untuk memblokir input.</summary>
     public bool IsRespawning => respawnLocked || netHidden.Value;
+
+    /// <summary>True jika pemain sedang jatuh ke air atau sedang proses respawn (disinkronkan ke semua client untuk CameraTracker).</summary>
+    public bool IsOffBoatOrRespawning => isFallingOff || remoteFallingOff || respawnLocked || netOffBoat.Value || netHidden.Value;
 
     private void Awake()
     {
@@ -77,6 +83,28 @@ public class PlayerMovement : NetworkBehaviour
             {
                 NetworkObject.TrySetParent(boat.NetworkObject, true);
             }
+        }
+
+        if (IsOwner)
+        {
+            StartCoroutine(ReportReadyWhenParentedRoutine());
+        }
+    }
+
+    private IEnumerator ReportReadyWhenParentedRoutine()
+    {
+        // Tunggu singkat hingga parenting ke kapal & GameSpawner tereplikasi ke client sebelum melapor siap
+        float waited = 0f;
+        bool hasBoat = FindFirstObjectByType<BoatController>() != null;
+        while (waited < 2f && ((hasBoat && transform.parent == null) || GameSpawner.Instance == null || !GameSpawner.Instance.IsSpawned))
+        {
+            waited += Time.deltaTime;
+            yield return null;
+        }
+
+        if (GameSpawner.Instance != null && GameSpawner.Instance.IsSpawned)
+        {
+            GameSpawner.Instance.NotifyClientPlayerReadyRpc();
         }
     }
 
@@ -129,8 +157,11 @@ public class PlayerMovement : NetworkBehaviour
     {
         if (!IsSpawned || !IsOwner) return;
 
-        // Cegah input jalan WASD saat membidik/menarik laso, respawn, atau sedang jatuh dari kapal
-        if (Application.isFocused && !isMovementLocked && !respawnLocked && !isFallingOff)
+        // Tahan seluruh pergerakan pemain sampai seluruh anggota tim selesai spawn
+        if (!GameSpawner.IsMatchReady) return;
+
+        // Cegah input jalan WASD saat membidik/menarik laso, respawn, menu terbuka, atau sedang jatuh dari kapal
+        if (Application.isFocused && !isMovementLocked && !respawnLocked && !isFallingOff && !InGameMenuUI.ShouldLockMovement)
         {
             HandleMovement();
         }
@@ -158,22 +189,47 @@ public class PlayerMovement : NetworkBehaviour
         }
 
         inputVector.Normalize();
-        Vector3 worldMoveDir = new Vector3(inputVector.x, 0f, inputVector.y);
 
-        if (worldMoveDir.magnitude >= 0.1f)
+        // Gerak selalu relatif terhadap arah pandang kamera layar (W = selalu ke depan/atas layar),
+        // tidak terpengaruh oleh rotasi kapal yang berputar-putar.
+        Vector3 camForward = Vector3.forward;
+        Vector3 camRight = Vector3.right;
+        Camera mainCam = Camera.main;
+        if (mainCam != null)
         {
+            camForward = mainCam.transform.forward;
+            camForward.y = 0f;
+            if (camForward.sqrMagnitude > 0.0001f) camForward.Normalize();
+            else camForward = Vector3.forward;
+
+            camRight = mainCam.transform.right;
+            camRight.y = 0f;
+            if (camRight.sqrMagnitude > 0.0001f) camRight.Normalize();
+            else camRight = Vector3.right;
+        }
+
+        Vector3 worldMoveDir = camForward * inputVector.y + camRight * inputVector.x;
+
+        if (worldMoveDir.sqrMagnitude >= 0.01f)
+        {
+            worldMoveDir.Normalize();
+
             if (transform.parent != null)
             {
                 Vector3 localMoveDir = transform.parent.InverseTransformDirection(worldMoveDir);
                 transform.localPosition += localMoveDir * moveSpeed * Time.deltaTime;
+
+                Quaternion targetWorldRot = Quaternion.LookRotation(worldMoveDir, Vector3.up);
+                Quaternion targetLocalRot = Quaternion.Inverse(transform.parent.rotation) * targetWorldRot;
+                transform.localRotation = Quaternion.Slerp(transform.localRotation, targetLocalRot, rotationSpeed * Time.deltaTime);
             }
             else
             {
                 transform.position += worldMoveDir * moveSpeed * Time.deltaTime;
-            }
 
-            Quaternion targetRotation = Quaternion.LookRotation(worldMoveDir, Vector3.up);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+                Quaternion targetRotation = Quaternion.LookRotation(worldMoveDir, Vector3.up);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+            }
         }
     }
 
@@ -208,6 +264,7 @@ public class PlayerMovement : NetworkBehaviour
     private void FallOffBoatServerRpc()
     {
         if (serverRespawning) return;
+        netOffBoat.Value = true;
         NetworkObject.TryRemoveParent(true);
         EnableGravityClientRpc();
     }
@@ -215,6 +272,9 @@ public class PlayerMovement : NetworkBehaviour
     [ClientRpc]
     private void EnableGravityClientRpc()
     {
+        remoteFallingOff = true;
+        AudioManager.Instance?.PlaySFX("player_splash", 0.08f);
+
         // Hanya pemilik yang mensimulasikan jatuh. Salinan di peer lain mengikuti NetworkTransform (kinematic),
         // kalau tidak, fisika lokal dan posisi dari jaringan saling tarik sehingga jatuhnya terasa tersangkut.
         rb.isKinematic = !IsOwner;
@@ -332,6 +392,7 @@ public class PlayerMovement : NetworkBehaviour
         yield return new WaitForSeconds(hiddenDuration);
 
         // 3) Muncul (invisible -> visible). Owner membuka kunci gerak setelah animasi selesai.
+        netOffBoat.Value = false;
         netHidden.Value = false;
 
         yield return new WaitForSeconds(appearDuration);
@@ -479,6 +540,8 @@ public class PlayerMovement : NetworkBehaviour
         }
         else
         {
+            remoteFallingOff = false;
+            AudioManager.Instance?.PlaySFX("player_respawn", 0.06f);
             appearCoroutine = StartCoroutine(AppearRoutine());
             if (IsOwner) StartCoroutine(OwnerUnlockRoutine());
         }
