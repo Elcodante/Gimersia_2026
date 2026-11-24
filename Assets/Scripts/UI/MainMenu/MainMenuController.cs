@@ -211,13 +211,10 @@ public class MainMenuController : MonoBehaviour
 
     private static string GetRelayConnectionType(out bool useWebSockets)
     {
-#if UNITY_WEBGL && !UNITY_EDITOR
+        // Target platform adalah WebGL (Web), sehingga Unity Relay memakai WebSocket Secure ("wss")
+        // baik saat dijalankan di Build WebGL maupun di Unity Editor.
         useWebSockets = true;
         return "wss";
-#else
-        useWebSockets = false;
-        return "dtls";
-#endif
     }
 
     // --- ANIMASI LOADING DOTS SAAT MENUNGGU RELAY ---
