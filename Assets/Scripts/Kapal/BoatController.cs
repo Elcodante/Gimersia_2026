@@ -75,6 +75,9 @@ public class BoatController : NetworkBehaviour
 
     private Vector3 currentFlow = Vector3.zero;
     private bool riverSearched = false;
+    private Vector3 initialWorldPos;
+    private Quaternion initialWorldRot;
+    private bool initialPoseCaptured = false;
 
     private void Awake()
     {
@@ -95,6 +98,20 @@ public class BoatController : NetworkBehaviour
         // Hambatan diganti drag relatif terhadap air (lihat ApplyRiverDrift), kalau tidak kapal tidak akan pernah mencapai kecepatan arus
         if (driftWithRiver) rb.linearDamping = 0f;
         if (slipperyHull) ApplySlipperyMaterial();
+
+        initialWorldPos = transform.position;
+        initialWorldRot = transform.rotation;
+        initialPoseCaptured = true;
+    }
+
+    public override void OnNetworkSpawn()
+    {
+        if (IsServer)
+        {
+            initialWorldPos = rb != null ? rb.position : transform.position;
+            initialWorldRot = rb != null ? rb.rotation : transform.rotation;
+            initialPoseCaptured = true;
+        }
     }
 
     private void ApplySlipperyMaterial()
@@ -210,6 +227,28 @@ public class BoatController : NetworkBehaviour
     private void FixedUpdate()
     {
         if (!IsServer || !IsSpawned || rb.isKinematic) return;
+
+        // Tahan kapal tetap diam di posisi awal sampai seluruh pemain berhasil di-spawn
+        if (!GameSpawner.IsMatchReady)
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            if (initialPoseCaptured)
+            {
+                rb.position = initialWorldPos;
+                rb.rotation = initialWorldRot;
+            }
+            return;
+        }
+
+        // Perlambat kapal dengan lembut di area tujuan akhir setelah finis tercapai
+        if (RiverFinishGoal.HasFinished)
+        {
+            float damp = Mathf.Exp(-3.5f * Time.fixedDeltaTime);
+            rb.linearVelocity *= damp;
+            rb.angularVelocity *= damp;
+            return;
+        }
 
         CleanupStaleContacts();
         ProcessActivePulls();

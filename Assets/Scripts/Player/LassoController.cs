@@ -131,8 +131,8 @@ public class LassoController : NetworkBehaviour
 
     private void HandleOwnerInput()
     {
-        // Selama tenggelam / respawn, tidak ada input laso
-        if (playerMovement != null && playerMovement.IsRespawning)
+        // Tahan input laso sampai seluruh pemain selesai spawn, atau saat sedang tenggelam/respawn
+        if (!GameSpawner.IsMatchReady || (playerMovement != null && playerMovement.IsRespawning))
         {
             isLocalAiming = false;
             return;
@@ -376,6 +376,7 @@ public class LassoController : NetworkBehaviour
         netTargetPoint.Value = landingPoint;
         netProgress.Value = 0f;
         netState.Value = LassoState.Throwing;
+        PlayLassoSfxClientRpc("lasso_throw", 0.08f);
 
         float elapsed = 0f;
         while (elapsed < throwDuration)
@@ -395,6 +396,8 @@ public class LassoController : NetworkBehaviour
 
             latchedRockTransform = (latchedTrash == null) ? hitTarget.transform : null;
             latchedRockCollider = (latchedTrash == null) ? hitTarget : null;
+
+            PlayLassoSfxClientRpc(latchedTrash != null ? "lasso_latch_trash" : "lasso_latch_rock", 0.08f);
 
             Vector3 targetPos = hitTarget.transform.position;
             netTargetPoint.Value = targetPos;
@@ -550,6 +553,7 @@ public class LassoController : NetworkBehaviour
     private IEnumerator RetractRopeRoutine()
     {
         netState.Value = LassoState.Retracting;
+        PlayLassoSfxClientRpc("lasso_release", 0.06f);
 
         float retractElapsed = 0f;
         while (retractElapsed < retractDuration)
@@ -645,6 +649,12 @@ public class LassoController : NetworkBehaviour
             netProgress.Value = 0f;
             netState.Value = LassoState.Idle;
         }
+    }
+
+    [ClientRpc]
+    private void PlayLassoSfxClientRpc(string sfxId, float pitchRange)
+    {
+        AudioManager.Instance?.PlaySFX(sfxId, pitchRange);
     }
 
     private float FlatDistance(Vector3 a, Vector3 b)

@@ -1,0 +1,68 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a05c46ee8732cf940a58366171dbb16a, type: 3}
+  m_Name: DefaultPlayerCharacters
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCharacterCatalog
+  variants:
+  - characterName: Petualang Biru
+    modelPrefab: {fileID: 0}
+    modelLocalPosition: {x: 0, y: 0, z: 0}
+    modelLocalEuler: {x: 0, y: 0, z: 0}
+    modelLocalScale: {x: 1, y: 1, z: 1}
+    bodyChildName: 
+    headChildName: 
+    bodyMeshOverride: {fileID: 0}
+    headMeshOverride: {fileID: 0}
+    bodyMaterialOverride: {fileID: 0}
+    headMaterialOverride: {fileID: 0}
+    useFallbackTint: 1
+    fallbackTintColor: {r: 0.24, g: 0.58, b: 0.92, a: 1}
+  - characterName: Petualang Merah
+    modelPrefab: {fileID: 0}
+    modelLocalPosition: {x: 0, y: 0, z: 0}
+    modelLocalEuler: {x: 0, y: 0, z: 0}
+    modelLocalScale: {x: 1, y: 1, z: 1}
+    bodyChildName: 
+    headChildName: 
+    bodyMeshOverride: {fileID: 0}
+    headMeshOverride: {fileID: 0}
+    bodyMaterialOverride: {fileID: 0}
+    headMaterialOverride: {fileID: 0}
+    useFallbackTint: 1
+    fallbackTintColor: {r: 0.92, g: 0.32, b: 0.28, a: 1}
+  - characterName: Petualang Hijau
+    modelPrefab: {fileID: 0}
+    modelLocalPosition: {x: 0, y: 0, z: 0}
+    modelLocalEuler: {x: 0, y: 0, z: 0}
+    modelLocalScale: {x: 1, y: 1, z: 1}
+    bodyChildName: 
+    headChildName: 
+    bodyMeshOverride: {fileID: 0}
+    headMeshOverride: {fileID: 0}
+    bodyMaterialOverride: {fileID: 0}
+    headMaterialOverride: {fileID: 0}
+    useFallbackTint: 1
+    fallbackTintColor: {r: 0.26, g: 0.78, b: 0.44, a: 1}
+  - characterName: Petualang Emas
+    modelPrefab: {fileID: 0}
+    modelLocalPosition: {x: 0, y: 0, z: 0}
+    modelLocalEuler: {x: 0, y: 0, z: 0}
+    modelLocalScale: {x: 1, y: 1, z: 1}
+    bodyChildName: 
+    headChildName: 
+    bodyMeshOverride: {fileID: 0}
+    headMeshOverride: {fileID: 0}
+    bodyMaterialOverride: {fileID: 0}
+    headMaterialOverride: {fileID: 0}
+    useFallbackTint: 1
+    fallbackTintColor: {r: 0.95, g: 0.74, b: 0.2, a: 1}
+
