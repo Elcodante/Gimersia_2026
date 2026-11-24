@@ -26,7 +26,7 @@ public class NetworkLobbyManager : NetworkBehaviour
         }
     }
 
-    public NetworkList<LobbyPlayerState> LobbyPlayers;
+    public NetworkList<LobbyPlayerState> LobbyPlayers = new NetworkList<LobbyPlayerState>();
     public static event Action OnLobbyUpdated;
 
     private void Awake()
@@ -34,30 +34,43 @@ public class NetworkLobbyManager : NetworkBehaviour
         if (Instance == null)
         {
             Instance = this;
-            LobbyPlayers = new NetworkList<LobbyPlayerState>();
         }
-        else
+        else if (Instance != this)
         {
             Destroy(gameObject);
         }
     }
 
+    public override void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+
+        LobbyPlayers?.Dispose();
+        base.OnDestroy();
+    }
+
     public override void OnNetworkSpawn()
     {
+        LobbyPlayers.OnListChanged += HandleLobbyPlayersChanged;
+
         // Bersihkan sisa-sisa sesi sebelumnya (mencegah bug "Nama Nyangkut")
         if (IsServer)
         {
             LobbyPlayers.Clear();
             AddPlayerToList(NetworkManager.ServerClientId, MainMenuController.LocalPlayerName, true);
             NetworkManager.Singleton.OnClientDisconnectCallback += HandleClientDisconnect;
+            Debug.Log($"[Lobby] Host spawned LobbyManager. HostName='{MainMenuController.LocalPlayerName}'");
         }
 
         if (IsClient && !IsServer)
         {
+            Debug.Log($"[Lobby] Client ({NetworkManager.Singleton.LocalClientId}) spawned LobbyManager. Submitting name='{MainMenuController.LocalPlayerName}' (current list count={LobbyPlayers.Count})");
             SubmitPlayerNameRpc(MainMenuController.LocalPlayerName);
         }
 
-        LobbyPlayers.OnListChanged += HandleLobbyPlayersChanged;
         OnLobbyUpdated?.Invoke();
     }
 
@@ -78,17 +91,34 @@ public class NetworkLobbyManager : NetworkBehaviour
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void SubmitPlayerNameRpc(string playerName, RpcParams rpcParams = default)
     {
-        AddPlayerToList(rpcParams.Receive.SenderClientId, playerName, false);
+        ulong senderId = rpcParams.Receive.SenderClientId;
+        Debug.Log($"[Lobby] Server received player name '{playerName}' from clientId={senderId}");
+        AddPlayerToList(senderId, playerName, false);
     }
 
     private void AddPlayerToList(ulong clientId, string playerName, bool isHost)
     {
-        LobbyPlayers.Add(new LobbyPlayerState
+        string safeName = string.IsNullOrWhiteSpace(playerName)
+            ? $"Player {clientId + 1}"
+            : playerName.Trim();
+
+        LobbyPlayerState state = new LobbyPlayerState
         {
             ClientId = clientId,
-            PlayerName = new FixedString32Bytes(playerName),
+            PlayerName = new FixedString32Bytes(safeName),
             IsHost = isHost
-        });
+        };
+
+        for (int i = 0; i < LobbyPlayers.Count; i++)
+        {
+            if (LobbyPlayers[i].ClientId == clientId)
+            {
+                LobbyPlayers[i] = state;
+                return;
+            }
+        }
+
+        LobbyPlayers.Add(state);
     }
 
     private void HandleClientDisconnect(ulong clientId)

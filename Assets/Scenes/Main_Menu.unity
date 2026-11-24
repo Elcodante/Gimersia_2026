@@ -3531,7 +3531,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MainMenuController
   gameSceneName: In_Game_Raka
   maxPlayers: 4
-  useRelayInEditor: 0
+  useRelayInEditor: 1
   panelMainMenu: {fileID: 1157586149}
   panelSelection: {fileID: 865150541}
   panelHost: {fileID: 155772777}

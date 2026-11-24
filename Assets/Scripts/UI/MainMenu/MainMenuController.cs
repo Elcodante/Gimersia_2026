@@ -21,8 +21,9 @@ public class MainMenuController : MonoBehaviour
     [Header("Pengaturan Scene & Mode Testing")]
     [SerializeField] private string gameSceneName = "In_Game_Raka";
     [SerializeField] private int maxPlayers = 4;
-    [Tooltip("Matikan saat tes di Editor jika Burst TLS bermasalah. Saat di-build ke WebGL, Relay WSS akan otomatis aktif.")]
-    [SerializeField] private bool useRelayInEditor = false;
+    [Tooltip("Aktifkan agar bisa bermain lintas perangkat/jaringan dari Editor maupun MPPM lewat Unity Relay. Matikan hanya untuk tes offline localhost (127.0.0.1).")]
+    [SerializeField] private bool useRelayInEditor = true;
+    [SerializeField] private float clientConnectTimeout = 12f;
 
     [Header("Daftar Panel UI")]
     [SerializeField] private GameObject panelMainMenu;
@@ -58,6 +59,11 @@ public class MainMenuController : MonoBehaviour
 
     private bool isServicesInitialized = false;
     private Coroutine loadingDotsCoroutine;
+    private Coroutine clientConnectTimeoutCoroutine;
+    private bool isWaitingForClientConnect = false;
+    private string pendingJoinCode = string.Empty;
+    private TMP_Text pendingJoinLabel;
+    private string pendingJoinOriginalText = string.Empty;
 
     private async void Start()
     {
@@ -124,7 +130,13 @@ public class MainMenuController : MonoBehaviour
         {
             if (UnityServices.State == ServicesInitializationState.Uninitialized)
             {
-                await UnityServices.InitializeAsync();
+                InitializationOptions options = new InitializationOptions();
+#if UNITY_EDITOR
+                // Gunakan profil unik per instance Editor/MPPM agar sesi Auth tidak bentrok saat tes 2 Play Unity
+                string editorProfile = $"ed_{Mathf.Abs(Application.dataPath.GetHashCode()):X8}";
+                options.SetProfile(editorProfile);
+#endif
+                await UnityServices.InitializeAsync(options);
             }
 
             if (!AuthenticationService.Instance.IsSignedIn)
@@ -194,6 +206,17 @@ public class MainMenuController : MonoBehaviour
         return useRelayInEditor;
 #else
         return true;
+#endif
+    }
+
+    private static string GetRelayConnectionType(out bool useWebSockets)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        useWebSockets = true;
+        return "wss";
+#else
+        useWebSockets = false;
+        return "dtls";
 #endif
     }
 
@@ -290,18 +313,25 @@ public class MainMenuController : MonoBehaviour
             if (ShouldUseRelay())
             {
                 if (!isServicesInitialized) await InitializeUnityServicesAsync();
+                if (!isServicesInitialized)
+                {
+                    throw new InvalidOperationException("Unity Services / Authentication gagal diinisialisasi. Pastikan internet aktif.");
+                }
 
                 Allocation allocation = await RelayService.Instance.CreateAllocationAsync(maxPlayers - 1);
                 joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
 
-                transport.UseWebSockets = true;
-                var relayServerData = AllocationUtils.ToRelayServerData(allocation, "wss");
+                string connType = GetRelayConnectionType(out bool useWs);
+                transport.UseWebSockets = useWs;
+                var relayServerData = AllocationUtils.ToRelayServerData(allocation, connType);
                 transport.SetRelayServerData(relayServerData);
+                Debug.Log($"[Lobby] Host Relay siap (protocol={connType}, code={joinCode})");
             }
             else
             {
                 transport.UseWebSockets = false;
                 transport.SetConnectionData("127.0.0.1", 7777);
+                Debug.Log($"[Lobby] Host mode lokal (127.0.0.1:7777, code={joinCode})");
             }
 
             lobbyUIJuice?.ResetSlots();
@@ -339,10 +369,14 @@ public class MainMenuController : MonoBehaviour
 
     private async Task StartClientMultiplayerAsync()
     {
+        if (isWaitingForClientConnect) return;
+
         string joinCode = inputFieldCode.text.Trim().ToUpper();
         buttonJoinRoom.interactable = false;
-        TMP_Text joinLabel = StartButtonLoading(buttonJoinRoom, out string originalText);
+        buttonExitJoin.interactable = false;
+        pendingJoinLabel = StartButtonLoading(buttonJoinRoom, out pendingJoinOriginalText);
 
+        bool startedConnecting = false;
         try
         {
             var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
@@ -350,27 +384,37 @@ public class MainMenuController : MonoBehaviour
             if (ShouldUseRelay())
             {
                 if (!isServicesInitialized) await InitializeUnityServicesAsync();
+                if (!isServicesInitialized)
+                {
+                    throw new InvalidOperationException("Unity Services / Authentication gagal diinisialisasi. Pastikan internet aktif.");
+                }
 
                 JoinAllocation joinAllocation = await RelayService.Instance.JoinAllocationAsync(joinCode);
 
-                transport.UseWebSockets = true;
-                var relayServerData = AllocationUtils.ToRelayServerData(joinAllocation, "wss");
+                string connType = GetRelayConnectionType(out bool useWs);
+                transport.UseWebSockets = useWs;
+                var relayServerData = AllocationUtils.ToRelayServerData(joinAllocation, connType);
                 transport.SetRelayServerData(relayServerData);
+                Debug.Log($"[Lobby] Client Relay siap (protocol={connType}, code={joinCode})");
             }
             else
             {
                 transport.UseWebSockets = false;
                 transport.SetConnectionData("127.0.0.1", 7777);
+                Debug.Log($"[Lobby] Client mode lokal mencoba konek ke 127.0.0.1:7777");
             }
 
             lobbyUIJuice?.ResetSlots();
 
             if (NetworkManager.Singleton.StartClient())
             {
-                textCode.text = $"{joinCode}";
-                buttonPlayGame.gameObject.SetActive(false);
-                SwitchPanel(panelHost, MenuPanelTransitioner.TransitionStyle.PlantSign, true);
-                UpdateLobbyPlayerListUI();
+                // Jangan langsung pindah ke Panel_Host sebelum koneksi ke server benar-benar berhasil!
+                startedConnecting = true;
+                isWaitingForClientConnect = true;
+                pendingJoinCode = joinCode;
+
+                if (clientConnectTimeoutCoroutine != null) StopCoroutine(clientConnectTimeoutCoroutine);
+                clientConnectTimeoutCoroutine = StartCoroutine(ClientConnectTimeoutRoutine());
             }
             else
             {
@@ -386,21 +430,61 @@ public class MainMenuController : MonoBehaviour
         }
         finally
         {
-            StopButtonLoading(joinLabel, originalText);
+            if (!startedConnecting)
+            {
+                StopButtonLoading(pendingJoinLabel, pendingJoinOriginalText);
+                buttonExitJoin.interactable = true;
+            }
         }
+    }
+
+    private IEnumerator ClientConnectTimeoutRoutine()
+    {
+        float timeout = Mathf.Max(3f, clientConnectTimeout);
+        yield return new WaitForSecondsRealtime(timeout);
+
+        if (isWaitingForClientConnect)
+        {
+            Debug.LogWarning($"[Lobby] Koneksi Client timeout setelah {timeout:F0} detik (kode='{pendingJoinCode}'). Pastikan Host aktif dan mode jaringan cocok.");
+            AbortPendingClientJoin();
+        }
+    }
+
+    private void AbortPendingClientJoin()
+    {
+        isWaitingForClientConnect = false;
+        pendingJoinCode = string.Empty;
+
+        if (clientConnectTimeoutCoroutine != null)
+        {
+            StopCoroutine(clientConnectTimeoutCoroutine);
+            clientConnectTimeoutCoroutine = null;
+        }
+
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening && !NetworkManager.Singleton.IsHost)
+        {
+            NetworkManager.Singleton.Shutdown();
+        }
+
+        StopButtonLoading(pendingJoinLabel, pendingJoinOriginalText);
+        buttonExitJoin.interactable = true;
+        codeInputJuice?.PlayErrorShake();
+        ValidateCodeInput(inputFieldCode.text);
     }
 
     // --- LOGIKA LOBBY & TRANSISI SCENE ---
 
     private void UpdateLobbyPlayerListUI()
     {
-        if (NetworkLobbyManager.Instance == null) return;
+        if (NetworkLobbyManager.Instance == null || NetworkLobbyManager.Instance.LobbyPlayers == null) return;
 
+        bool isListening = NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening;
         var players = NetworkLobbyManager.Instance.LobbyPlayers;
+        int count = isListening ? players.Count : 0;
 
         for (int i = 0; i < playerTexts.Length; i++)
         {
-            if (i < players.Count)
+            if (i < count)
             {
                 string pName = players[i].PlayerName.ToString();
                 if (players[i].IsHost)
@@ -417,7 +501,7 @@ public class MainMenuController : MonoBehaviour
                     playerTexts[i].text = pName;
                 }
 
-                if (players[i].ClientId == NetworkManager.Singleton.LocalClientId)
+                if (NetworkManager.Singleton != null && players[i].ClientId == NetworkManager.Singleton.LocalClientId)
                 {
                     buttonPlayGame.gameObject.SetActive(players[i].IsHost);
                 }
@@ -485,14 +569,51 @@ public class MainMenuController : MonoBehaviour
 
     private void OnClientConnected(ulong clientId)
     {
+        if (NetworkManager.Singleton == null) return;
+
+        Debug.Log($"[Lobby] OnClientConnected: clientId={clientId}, localClientId={NetworkManager.Singleton.LocalClientId}, isHost={NetworkManager.Singleton.IsHost}");
+
+        // Client baru benar-benar masuk ke Panel_Host setelah koneksi diterima Server
+        if (isWaitingForClientConnect && !NetworkManager.Singleton.IsHost && clientId == NetworkManager.Singleton.LocalClientId)
+        {
+            isWaitingForClientConnect = false;
+            if (clientConnectTimeoutCoroutine != null)
+            {
+                StopCoroutine(clientConnectTimeoutCoroutine);
+                clientConnectTimeoutCoroutine = null;
+            }
+
+            StopButtonLoading(pendingJoinLabel, pendingJoinOriginalText);
+            buttonExitJoin.interactable = true;
+
+            textCode.text = $"{pendingJoinCode}";
+            buttonPlayGame.gameObject.SetActive(false);
+            SwitchPanel(panelHost, MenuPanelTransitioner.TransitionStyle.PlantSign, true);
+        }
+
         UpdateLobbyPlayerListUI();
     }
 
     private void OnClientDisconnected(ulong clientId)
     {
+        if (NetworkManager.Singleton == null) return;
+
+        string reason = NetworkManager.Singleton.DisconnectReason;
+        Debug.LogWarning($"[Lobby] OnClientDisconnected: clientId={clientId}, localClientId={NetworkManager.Singleton.LocalClientId}, reason='{reason}'");
+
+        if (isWaitingForClientConnect && !NetworkManager.Singleton.IsHost &&
+            (clientId == NetworkManager.Singleton.LocalClientId || clientId == NetworkManager.ServerClientId))
+        {
+            AbortPendingClientJoin();
+            return;
+        }
+
         if (clientId == NetworkManager.Singleton.LocalClientId || clientId == NetworkManager.ServerClientId)
         {
-            if (NetworkLobbyManager.Instance != null && NetworkLobbyManager.Instance.LobbyPlayers != null)
+            // Hanya Server yang berhak memanggil Clear() pada NetworkList
+            if (NetworkManager.Singleton.IsServer &&
+                NetworkLobbyManager.Instance != null &&
+                NetworkLobbyManager.Instance.LobbyPlayers != null)
             {
                 NetworkLobbyManager.Instance.LobbyPlayers.Clear();
             }
