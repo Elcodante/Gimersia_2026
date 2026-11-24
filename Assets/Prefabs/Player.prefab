@@ -199,6 +199,7 @@ GameObject:
   - component: {fileID: 7635820519271223927}
   - component: {fileID: 9123456789012345671}
   - component: {fileID: 9123456789012345672}
+  - component: {fileID: 7903302474408995725}
   m_Layer: 2
   m_Name: Player
   m_TagString: Player
@@ -258,7 +259,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 3477146151
+  GlobalObjectIdHash: 4146879840
   InScenePlacedSourceGlobalObjectIdHash: 4146879840
   m_InScenePlacedDisabledByDefault: 0
   DeferredDespawnTick: 0
@@ -639,3 +640,24 @@ MonoBehaviour:
   outlineColor: {r: 0.1, g: 0.08, b: 0.06, a: 1}
   outlineWidth: 0.24
   fontAsset: {fileID: 11400000, guid: cf7aeda206acd4941b65c72c22cb4c17, type: 2}
+--- !u!114 &7903302474408995725
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8227967121169388710}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b74f56513ce23544db11a4b35b50ea64, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCharacterAppearance
+  ShowTopMostFoldoutHeaderGroup: 1
+  catalog: {fileID: 11400000, guid: abad74d074fce9243a43912dc585071f, type: 2}
+  defaultBodyVisual: {fileID: 0}
+  defaultHeadVisual: {fileID: 0}
+  CharacterIndex:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: -1

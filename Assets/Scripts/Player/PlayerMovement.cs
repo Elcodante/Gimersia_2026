@@ -479,13 +479,24 @@ public class PlayerMovement : NetworkBehaviour
 
     // ------------------------------------------------------------------ VISUAL (hilang / muncul)
 
+    /// <summary>
+    /// Dipanggil ketika model visual karakter diganti (mis. oleh PlayerCharacterAppearance)
+    /// agar efek sembunyi/muncul respawn menyertakan mesh karakter baru.
+    /// </summary>
+    public void RefreshVisualCache()
+    {
+        CacheVisuals();
+        SetRenderersVisible(!netHidden.Value);
+    }
+
     private void CacheVisuals()
     {
         var list = new List<Renderer>();
         foreach (Renderer r in GetComponentsInChildren<Renderer>(true))
         {
-            if (r is LineRenderer) continue;                              // garis bidik laso
+            if (r is LineRenderer) continue;                                  // garis bidik laso
             if (r.GetComponentInParent<VerletRopeVisual>() != null) continue; // tali 3D + kait
+            if (r.GetComponent<TMPro.TMP_Text>() != null) continue;           // nametag diatur PlayerNameTag sendiri
             list.Add(r);
         }
         hideRenderers = list.ToArray();

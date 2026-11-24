@@ -63,6 +63,23 @@ public class PlayerSwayAnimator : MonoBehaviour
         if (head != null) headPose = Capture(head);
     }
 
+    /// <summary>
+    /// Memperbarui referensi visual badan & kepala saat model karakter diganti secara dinamis
+    /// (mis. oleh PlayerCharacterAppearance).
+    /// </summary>
+    public void RebindVisuals(Transform newBody, Transform newHead)
+    {
+        body = newBody;
+        head = newHead;
+        bodyTilt = Vector2.zero;
+        bodyTiltVel = Vector2.zero;
+        headTilt = Vector2.zero;
+        headTiltVel = Vector2.zero;
+
+        if (body != null) bodyPose = Capture(body);
+        if (head != null) headPose = Capture(head);
+    }
+
     private LocalPose Capture(Transform t)
     {
         return new LocalPose
