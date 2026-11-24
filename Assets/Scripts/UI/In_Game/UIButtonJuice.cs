@@ -35,6 +35,10 @@ public class UIButtonJuice : MonoBehaviour,
     [SerializeField] private float pulseAmplitude = 0.03f;
     [SerializeField] private float pulseFrequency = 0.55f;
 
+    [Header("Audio UI (Opsional)")]
+    [SerializeField] private string hoverSfxId = "ui_hover";
+    [SerializeField] private string clickSfxId = "ui_click";
+
     private RectTransform rectTransform;
     private Selectable selectable;
     private CanvasGroup canvasGroup;
@@ -120,6 +124,11 @@ public class UIButtonJuice : MonoBehaviour,
         CaptureBaseIfNeeded();
         isHovered = true;
         OnHoverChanged?.Invoke(this, true);
+
+        if (!string.IsNullOrEmpty(hoverSfxId) && AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlaySFX(hoverSfxId, 0.05f);
+        }
     }
 
     public void OnPointerExit(PointerEventData eventData)
@@ -146,6 +155,12 @@ public class UIButtonJuice : MonoBehaviour,
     public void OnPointerClick(PointerEventData eventData)
     {
         if (!IsInteractable) return;
+
+        if (!string.IsNullOrEmpty(clickSfxId) && AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlaySFX(clickSfxId, 0.04f);
+        }
+
         if (Mathf.Abs(clickSpinZ) > 0.01f)
         {
             CaptureBaseIfNeeded();

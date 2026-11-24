@@ -62,6 +62,11 @@ public class InGameMenuUI : MonoBehaviour
         IsMenuOpen = open;
         ShouldLockMovement = open && lockMovementWhenOpen;
 
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlaySFX("ui_journal_open", 0.05f);
+        }
+
         if (journalAnimator != null)
         {
             if (open) journalAnimator.PlayOpen();

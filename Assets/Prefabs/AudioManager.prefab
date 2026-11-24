@@ -1,4 +1,4 @@
-%YAML 1.1
+﻿%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!1 &6158543192696581449
 GameObject:
@@ -46,6 +46,62 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::AudioManager
   bgmSource: {fileID: 0}
   sfxSource: {fileID: 0}
-  bgmList: []
-  sfxList: []
-  defaultBgmId: 
+  bgmList:
+  - id: bgm_main_menu
+    clip: {fileID: 8300000, guid: a100000147696d657273696132303236, type: 3}
+    baseVolume: 0.55
+    pitch: 1
+  - id: bgm_gameplay
+    clip: {fileID: 8300000, guid: a100000247696d657273696132303236, type: 3}
+    baseVolume: 0.45
+    pitch: 1
+  sfxList:
+  - id: ui_hover
+    clip: {fileID: 8300000, guid: b200000147696d657273696132303236, type: 3}
+    baseVolume: 0.35
+    pitch: 1
+  - id: ui_click
+    clip: {fileID: 8300000, guid: b200000247696d657273696132303236, type: 3}
+    baseVolume: 0.65
+    pitch: 1
+  - id: ui_journal_open
+    clip: {fileID: 8300000, guid: b200000347696d657273696132303236, type: 3}
+    baseVolume: 0.6
+    pitch: 1
+  - id: lasso_throw
+    clip: {fileID: 8300000, guid: b200000447696d657273696132303236, type: 3}
+    baseVolume: 0.65
+    pitch: 1
+  - id: lasso_latch_rock
+    clip: {fileID: 8300000, guid: b200000547696d657273696132303236, type: 3}
+    baseVolume: 0.78
+    pitch: 1
+  - id: lasso_latch_trash
+    clip: {fileID: 8300000, guid: b200000647696d657273696132303236, type: 3}
+    baseVolume: 0.75
+    pitch: 1
+  - id: lasso_release
+    clip: {fileID: 8300000, guid: b200000747696d657273696132303236, type: 3}
+    baseVolume: 0.5
+    pitch: 1
+  - id: trash_tug
+    clip: {fileID: 8300000, guid: b200000847696d657273696132303236, type: 3}
+    baseVolume: 0.72
+    pitch: 1
+  - id: trash_clear
+    clip: {fileID: 8300000, guid: b200000947696d657273696132303236, type: 3}
+    baseVolume: 0.85
+    pitch: 1
+  - id: boat_impact
+    clip: {fileID: 8300000, guid: b200000a47696d657273696132303236, type: 3}
+    baseVolume: 0.85
+    pitch: 1
+  - id: player_splash
+    clip: {fileID: 8300000, guid: b200000b47696d657273696132303236, type: 3}
+    baseVolume: 0.85
+    pitch: 1
+  - id: player_respawn
+    clip: {fileID: 8300000, guid: b200000c47696d657273696132303236, type: 3}
+    baseVolume: 0.7
+    pitch: 1
+  defaultBgmId: bgm_main_menu
