@@ -28,6 +28,7 @@ public class GameSpawner : NetworkBehaviour
 
     private readonly HashSet<ulong> spawnedClientIds = new HashSet<ulong>();
     private readonly HashSet<ulong> readyClientIds = new HashSet<ulong>();
+    private readonly Dictionary<ulong, int> assignedCharacterSlots = new Dictionary<ulong, int>();
     private bool sceneLoadEventReceived = false;
     private float waitTimer = 0f;
 
@@ -62,6 +63,7 @@ public class GameSpawner : NetworkBehaviour
             IsMatchStarted.Value = false;
             spawnedClientIds.Clear();
             readyClientIds.Clear();
+            assignedCharacterSlots.Clear();
             sceneLoadEventReceived = false;
             waitTimer = 0f;
             ExpectedPlayerCount.Value = Mathf.Max(1, NetworkManager.Singleton.ConnectedClientsIds.Count);
@@ -139,6 +141,13 @@ public class GameSpawner : NetworkBehaviour
         NetworkObject netObj = playerInstance.GetComponent<NetworkObject>();
         netObj.SpawnAsPlayerObject(clientId, true);
 
+        // Berikan slot karakter unik per pemain (disinkronkan otomatis lewat NetworkVariable)
+        PlayerCharacterAppearance appearance = playerInstance.GetComponent<PlayerCharacterAppearance>();
+        if (appearance != null)
+        {
+            appearance.AssignCharacterIndex(AllocateUniqueCharacterSlot(clientId));
+        }
+
         // Kaitkan pemain sebagai child dari kapal dengan worldPositionStays = true
         if (perahuNetworkObject != null)
         {
@@ -148,9 +157,30 @@ public class GameSpawner : NetworkBehaviour
         spawnedClientIds.Add(clientId);
     }
 
+    private int AllocateUniqueCharacterSlot(ulong clientId)
+    {
+        if (assignedCharacterSlots.TryGetValue(clientId, out int existingSlot))
+        {
+            return existingSlot;
+        }
+
+        int slot = 0;
+        while (assignedCharacterSlots.ContainsValue(slot))
+        {
+            slot++;
+        }
+
+        assignedCharacterSlots[clientId] = slot;
+        return slot;
+    }
+
     private void HandleClientDisconnected(ulong clientId)
     {
-        if (!IsServer || IsMatchStarted.Value) return;
+        if (!IsServer) return;
+
+        assignedCharacterSlots.Remove(clientId);
+
+        if (IsMatchStarted.Value) return;
 
         spawnedClientIds.Remove(clientId);
         readyClientIds.Remove(clientId);

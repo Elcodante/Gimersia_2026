@@ -241,6 +241,15 @@ public class BoatController : NetworkBehaviour
             return;
         }
 
+        // Perlambat kapal dengan lembut di area tujuan akhir setelah finis tercapai
+        if (RiverFinishGoal.HasFinished)
+        {
+            float damp = Mathf.Exp(-3.5f * Time.fixedDeltaTime);
+            rb.linearVelocity *= damp;
+            rb.angularVelocity *= damp;
+            return;
+        }
+
         CleanupStaleContacts();
         ProcessActivePulls();
         ProcessActiveTethers();
