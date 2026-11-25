@@ -26,14 +26,21 @@ public class NetworkPlayerData : NetworkBehaviour
 
         PlayerName.OnValueChanged += OnNameChanged;
 
-        // Jika ini adalah objek milik kita sendiri, kirim nama kita ke jaringan
+        // Jika ini adalah objek milik kita sendiri, kirim nama kita ke jaringan (kosongkan di mode Solo)
         if (IsOwner)
         {
-            string myName = string.IsNullOrWhiteSpace(MainMenuController.LocalPlayerName)
-                ? $"Player {OwnerClientId + 1}"
-                : MainMenuController.LocalPlayerName;
+            if (MainMenuController.IsSoloMode)
+            {
+                PlayerName.Value = default;
+            }
+            else
+            {
+                string myName = string.IsNullOrWhiteSpace(MainMenuController.LocalPlayerName)
+                    ? $"Player {OwnerClientId + 1}"
+                    : MainMenuController.LocalPlayerName;
 
-            PlayerName.Value = new FixedString64Bytes(myName);
+                PlayerName.Value = new FixedString64Bytes(myName);
+            }
         }
 
         OnPlayerListChanged?.Invoke();
