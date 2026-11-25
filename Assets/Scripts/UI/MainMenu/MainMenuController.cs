@@ -17,6 +17,7 @@ using UnityEngine.UI;
 public class MainMenuController : MonoBehaviour
 {
     public static string LocalPlayerName { get; private set; } = "Player";
+    public static bool IsSoloMode { get; private set; } = false;
 
     [Header("Pengaturan Scene & Mode Testing")]
     [SerializeField] private string gameSceneName = "In_Game_Raka";
@@ -67,6 +68,8 @@ public class MainMenuController : MonoBehaviour
 
     private async void Start()
     {
+        IsSoloMode = false;
+
         if (panelTransitioner != null)
         {
             panelTransitioner.SetInitialPanel(
@@ -181,6 +184,7 @@ public class MainMenuController : MonoBehaviour
 
     private void OpenSelectionPanel()
     {
+        IsSoloMode = false;
         ValidateNameInput(inputFieldNama.text);
         SwitchPanel(panelSelection, MenuPanelTransitioner.TransitionStyle.RiseTilt, true);
     }
@@ -268,14 +272,29 @@ public class MainMenuController : MonoBehaviour
 
     private void StartSoloGame()
     {
+        if (NetworkManager.Singleton == null) return;
+
         buttonPlaySolo.interactable = false;
-        LocalPlayerName = "Solo Player";
+        IsSoloMode = true;
+        LocalPlayerName = string.Empty;
 
         Action launchSolo = () =>
         {
-            var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
-            transport.UseWebSockets = false;
-            transport.SetConnectionData("127.0.0.1", 7777);
+            if (NetworkManager.Singleton == null)
+            {
+                buttonPlaySolo.interactable = true;
+                SceneFadeTransition.Instance?.CancelAndFadeIn();
+                return;
+            }
+
+            // Pakai OfflineSoloTransport agar StartHost() tidak membuka soket UDP/WebSocket
+            // (browser WebGL melarang listening socket lokal dan sebelumnya memicu disconnect ke Panel Selection).
+            OfflineSoloTransport soloTransport = NetworkManager.Singleton.GetComponent<OfflineSoloTransport>();
+            if (soloTransport == null)
+            {
+                soloTransport = NetworkManager.Singleton.gameObject.AddComponent<OfflineSoloTransport>();
+            }
+            NetworkManager.Singleton.NetworkConfig.NetworkTransport = soloTransport;
 
             if (NetworkManager.Singleton.StartHost())
             {
@@ -283,6 +302,7 @@ public class MainMenuController : MonoBehaviour
             }
             else
             {
+                IsSoloMode = false;
                 buttonPlaySolo.interactable = true;
                 SceneFadeTransition.Instance?.CancelAndFadeIn();
             }
@@ -298,10 +318,22 @@ public class MainMenuController : MonoBehaviour
         }
     }
 
+    private UnityTransport EnsureUnityTransport()
+    {
+        if (NetworkManager.Singleton == null) return null;
+        UnityTransport transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+        if (transport != null)
+        {
+            NetworkManager.Singleton.NetworkConfig.NetworkTransport = transport;
+        }
+        return transport;
+    }
+
     // --- LOGIKA MULTIPLAYER (HOST & JOIN) ---
 
     private async Task StartHostMultiplayerAsync()
     {
+        IsSoloMode = false;
         LocalPlayerName = inputFieldNama.text.Trim();
         buttonHost.interactable = false;
         buttonJoinSelection.interactable = false;
@@ -309,7 +341,7 @@ public class MainMenuController : MonoBehaviour
 
         try
         {
-            var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            var transport = EnsureUnityTransport();
             string joinCode = GenerateRandomCode(6);
 
             if (ShouldUseRelay())
@@ -373,6 +405,7 @@ public class MainMenuController : MonoBehaviour
     {
         if (isWaitingForClientConnect) return;
 
+        IsSoloMode = false;
         string joinCode = inputFieldCode.text.Trim().ToUpper();
         buttonJoinRoom.interactable = false;
         buttonExitJoin.interactable = false;
@@ -381,7 +414,7 @@ public class MainMenuController : MonoBehaviour
         bool startedConnecting = false;
         try
         {
-            var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            var transport = EnsureUnityTransport();
 
             if (ShouldUseRelay())
             {
@@ -599,6 +632,13 @@ public class MainMenuController : MonoBehaviour
     private void OnClientDisconnected(ulong clientId)
     {
         if (NetworkManager.Singleton == null) return;
+
+        if (IsSoloMode)
+        {
+            SceneFadeTransition.Instance?.CancelAndFadeIn();
+            buttonPlaySolo.interactable = true;
+            return;
+        }
 
         string reason = NetworkManager.Singleton.DisconnectReason;
         Debug.LogWarning($"[Lobby] OnClientDisconnected: clientId={clientId}, localClientId={NetworkManager.Singleton.LocalClientId}, reason='{reason}'");

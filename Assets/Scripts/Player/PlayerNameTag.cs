@@ -137,6 +137,12 @@ public class PlayerNameTag : MonoBehaviour
     {
         if (playerData == null) return;
 
+        if (MainMenuController.IsSoloMode)
+        {
+            ApplyName(string.Empty);
+            return;
+        }
+
         string currentName = playerData.PlayerName.Value.ToString();
         if (string.IsNullOrWhiteSpace(currentName) && playerData.IsSpawned)
         {
@@ -179,12 +185,16 @@ public class PlayerNameTag : MonoBehaviour
             }
         }
 
-        // Sembunyikan nama saat pemain sedang fase tak terlihat (respawn)
-        bool shouldShow = playerMovement == null || !playerMovement.IsRespawning;
+        // Sembunyikan nama di mode Solo atau saat pemain sedang fase tak terlihat (respawn)
+        bool shouldShow = !MainMenuController.IsSoloMode
+            && !string.IsNullOrWhiteSpace(lastDisplayedName)
+            && (playerMovement == null || !playerMovement.IsRespawning);
         if (tmpRenderer != null && tmpRenderer.enabled != shouldShow)
         {
             tmpRenderer.enabled = shouldShow;
         }
+
+        if (!shouldShow) return;
 
         // Posisikan selalu tegak lurus di atas kepala (sumbu Y dunia) & menghadap penuh ke kamera
         Vector3 worldPos = transform.position + Vector3.up * heightOffset;

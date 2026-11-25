@@ -5,7 +5,7 @@ using UnityEngine.UI;
 /// <summary>
 /// View UI murni untuk menampilkan Progress Bar perjalanan kapal di bagian atas layar.
 /// Membaca data dari RiverProgressTracker tanpa logika gameplay/jaringan.
-/// Jika referensi UI di Inspector dikosongkan, komponen otomatis membuat HUD bar rapi pada Canvas.
+/// Mendukung sprite desain kustom (Border, Track/Fill, Boat Marker, Goal Icon).
 /// </summary>
 [DisallowMultipleComponent]
 public class RiverProgressBarUI : MonoBehaviour
@@ -16,15 +16,25 @@ public class RiverProgressBarUI : MonoBehaviour
     [SerializeField] private RectTransform boatMarker;
     [SerializeField] private TMP_Text statusText;
 
-    [Header("Gaya & Font (Saat Auto-Create)")]
+    [Header("Sprite Desain Progress Bar")]
+    [SerializeField] private Sprite borderSprite;
+    [SerializeField] private Sprite trackAndFillSprite;
+    [SerializeField] private Sprite boatMarkerSprite;
+    [SerializeField] private Sprite goalIconSprite;
+
+    [Header("Ukuran & Posisi")]
+    [SerializeField] private float barWidth = 560f;
+    [SerializeField] private float barHeight = 26f;
+    [SerializeField] private float topMargin = 22f;
+    [SerializeField] private Vector2 boatMarkerSize = new Vector2(68f, 44f);
+    [SerializeField] private Vector2 goalIconSize = new Vector2(46f, 46f);
+
+    [Header("Warna & Teks")]
     [SerializeField] private TMP_FontAsset fontAsset;
-    [SerializeField] private float barWidth = 520f;
-    [SerializeField] private float topMargin = 20f;
-    [SerializeField] private Color frameColor = new Color(0.11f, 0.14f, 0.18f, 0.84f);
-    [SerializeField] private Color trackColor = new Color(0.20f, 0.25f, 0.30f, 0.92f);
-    [SerializeField] private Color fillStartColor = new Color(0.20f, 0.72f, 0.85f, 1f);
-    [SerializeField] private Color fillGoalColor = new Color(0.95f, 0.76f, 0.22f, 1f);
-    [SerializeField] private Color markerColor = new Color(1f, 0.94f, 0.72f, 1f);
+    [SerializeField] private bool showStatusText = true;
+    [SerializeField] private Color trackTint = Color.white;
+    [SerializeField] private Color fillStartColor = new Color(0.72f, 0.84f, 0.47f, 1f);
+    [SerializeField] private Color fillGoalColor = new Color(0.62f, 0.84f, 0.38f, 1f);
 
     [Header("Animasi")]
     [SerializeField] private float fillSmoothSpeed = 7f;
@@ -153,8 +163,11 @@ public class RiverProgressBarUI : MonoBehaviour
 
         if (boatMarker != null && fillTrackRect != null)
         {
-            float width = fillTrackRect.rect.width;
-            boatMarker.anchoredPosition = new Vector2(progress01 * width, 0f);
+            float trackWidth = fillTrackRect.rect.width;
+            float leftInset = boatMarkerSize.x * 0.35f;
+            float rightInset = goalIconSize.x * 0.45f;
+            float usableWidth = Mathf.Max(1f, trackWidth - leftInset - rightInset);
+            boatMarker.anchoredPosition = new Vector2(leftInset + progress01 * usableWidth, 0f);
         }
 
         if (forceText)
@@ -165,7 +178,7 @@ public class RiverProgressBarUI : MonoBehaviour
 
     private void UpdateTextIfChanged(bool force)
     {
-        if (statusText == null) return;
+        if (statusText == null || !showStatusText) return;
 
         int pct = Mathf.RoundToInt(targetProgress * 100f);
         int meters = Mathf.CeilToInt(remainingMeters);
@@ -186,11 +199,11 @@ public class RiverProgressBarUI : MonoBehaviour
         else if (meters >= 1000)
         {
             float km = meters * 0.001f;
-            statusText.text = $"{pct}%  •  {km:0.00} km ke tujuan";
+            statusText.text = $"{pct}%  •  {km:0.00} km";
         }
         else
         {
-            statusText.text = $"{pct}%  •  {meters} m ke tujuan";
+            statusText.text = $"{pct}%  •  {meters} m";
         }
     }
 
@@ -203,94 +216,133 @@ public class RiverProgressBarUI : MonoBehaviour
             if (foundCanvas != null) parentCanvas = foundCanvas.transform;
         }
 
-        // Container utama di atas-tengah layar
-        GameObject rootGo = new GameObject("RiverProgressBar_HUD", typeof(RectTransform), typeof(Image));
+        // Container utama transparan di atas-tengah layar
+        GameObject rootGo = new GameObject("RiverProgressBar_HUD", typeof(RectTransform));
         rootGo.transform.SetParent(parentCanvas, false);
-        rootGo.transform.SetAsFirstSibling(); // Pastikan Pause Menu (Panel_Settings) tetap tampil di atas HUD
+        rootGo.transform.SetAsFirstSibling(); // Pause menu tetap tampil di lapisan atas
 
         barRoot = rootGo.GetComponent<RectTransform>();
         barRoot.anchorMin = new Vector2(0.5f, 1f);
         barRoot.anchorMax = new Vector2(0.5f, 1f);
         barRoot.pivot = new Vector2(0.5f, 1f);
-        barRoot.sizeDelta = new Vector2(barWidth, 58f);
+        barRoot.sizeDelta = new Vector2(barWidth, Mathf.Max(barHeight, goalIconSize.y) + (showStatusText ? 26f : 0f));
         barRoot.anchoredPosition = new Vector2(0f, -topMargin);
 
-        Image frameBg = rootGo.GetComponent<Image>();
-        frameBg.color = frameColor;
-        frameBg.raycastTarget = false;
-
-        // Track background bar
-        GameObject trackGo = new GameObject("Track", typeof(RectTransform), typeof(Image));
-        trackGo.transform.SetParent(barRoot, false);
-        fillTrackRect = trackGo.GetComponent<RectTransform>();
-        fillTrackRect.anchorMin = new Vector2(0f, 1f);
-        fillTrackRect.anchorMax = new Vector2(1f, 1f);
+        // Area bar (track + fill + border)
+        GameObject barBodyGo = new GameObject("BarBody", typeof(RectTransform));
+        barBodyGo.transform.SetParent(barRoot, false);
+        fillTrackRect = barBodyGo.GetComponent<RectTransform>();
+        fillTrackRect.anchorMin = new Vector2(0.5f, 1f);
+        fillTrackRect.anchorMax = new Vector2(0.5f, 1f);
         fillTrackRect.pivot = new Vector2(0.5f, 1f);
-        fillTrackRect.offsetMin = new Vector2(18f, -24f);
-        fillTrackRect.offsetMax = new Vector2(-18f, -10f);
+        fillTrackRect.sizeDelta = new Vector2(barWidth, barHeight);
+        fillTrackRect.anchoredPosition = new Vector2(0f, -(Mathf.Max(0f, goalIconSize.y - barHeight) * 0.5f));
+
+        // 1. Track background (BLANK PROGRES)
+        GameObject trackGo = new GameObject("Track", typeof(RectTransform), typeof(Image));
+        trackGo.transform.SetParent(fillTrackRect, false);
+        RectTransform trackRt = trackGo.GetComponent<RectTransform>();
+        trackRt.anchorMin = Vector2.zero;
+        trackRt.anchorMax = Vector2.one;
+        trackRt.offsetMin = new Vector2(2f, 2f);
+        trackRt.offsetMax = new Vector2(-2f, -2f);
 
         Image trackImg = trackGo.GetComponent<Image>();
-        trackImg.color = trackColor;
+        trackImg.sprite = trackAndFillSprite;
+        trackImg.color = trackAndFillSprite != null ? trackTint : new Color(0.74f, 0.67f, 0.59f, 0.95f);
         trackImg.raycastTarget = false;
 
-        // Fill bar (menggunakan anchorX dinamis agar tidak butuh Sprite khusus)
+        // 2. Fill bar (BLANK PROGRES dengan Filled Horizontal atau fallback anchor)
         GameObject fillGo = new GameObject("Fill", typeof(RectTransform), typeof(Image));
         fillGo.transform.SetParent(fillTrackRect, false);
         RectTransform fillRt = fillGo.GetComponent<RectTransform>();
         fillRt.anchorMin = Vector2.zero;
-        fillRt.anchorMax = new Vector2(0f, 1f);
-        fillRt.offsetMin = Vector2.zero;
-        fillRt.offsetMax = Vector2.zero;
+        fillRt.anchorMax = Vector2.one;
+        fillRt.offsetMin = new Vector2(2f, 2f);
+        fillRt.offsetMax = new Vector2(-2f, -2f);
 
         fillImage = fillGo.GetComponent<Image>();
+        fillImage.sprite = trackAndFillSprite;
+        if (trackAndFillSprite != null)
+        {
+            fillImage.type = Image.Type.Filled;
+            fillImage.fillMethod = Image.FillMethod.Horizontal;
+            fillImage.fillOrigin = (int)Image.OriginHorizontal.Left;
+            fillImage.fillAmount = 0f;
+        }
         fillImage.color = fillStartColor;
         fillImage.raycastTarget = false;
 
-        // Penanda posisi tujuan di ujung kanan track
-        GameObject goalPinGo = new GameObject("GoalPin", typeof(RectTransform), typeof(Image));
+        // 3. Border outline (PROGRES BORDER) di atas Track & Fill
+        if (borderSprite != null)
+        {
+            GameObject borderGo = new GameObject("Border", typeof(RectTransform), typeof(Image));
+            borderGo.transform.SetParent(fillTrackRect, false);
+            RectTransform borderRt = borderGo.GetComponent<RectTransform>();
+            borderRt.anchorMin = Vector2.zero;
+            borderRt.anchorMax = Vector2.one;
+            borderRt.offsetMin = Vector2.zero;
+            borderRt.offsetMax = Vector2.zero;
+
+            Image borderImg = borderGo.GetComponent<Image>();
+            borderImg.sprite = borderSprite;
+            borderImg.color = Color.white;
+            borderImg.raycastTarget = false;
+        }
+
+        // 4. Ikon tujuan akhir di ujung kanan bar (OBJECTIF PROGRESS)
+        GameObject goalPinGo = new GameObject("GoalIcon", typeof(RectTransform), typeof(Image));
         goalPinGo.transform.SetParent(fillTrackRect, false);
         RectTransform goalPinRt = goalPinGo.GetComponent<RectTransform>();
         goalPinRt.anchorMin = new Vector2(1f, 0.5f);
         goalPinRt.anchorMax = new Vector2(1f, 0.5f);
         goalPinRt.pivot = new Vector2(0.5f, 0.5f);
-        goalPinRt.sizeDelta = new Vector2(10f, 20f);
-        goalPinRt.anchoredPosition = Vector2.zero;
+        goalPinRt.sizeDelta = goalIconSize;
+        goalPinRt.anchoredPosition = new Vector2(-goalIconSize.x * 0.2f, 0f);
 
         Image goalPinImg = goalPinGo.GetComponent<Image>();
-        goalPinImg.color = fillGoalColor;
+        goalPinImg.sprite = goalIconSprite;
+        goalPinImg.preserveAspect = true;
+        goalPinImg.color = goalIconSprite != null ? Color.white : new Color(0.95f, 0.76f, 0.22f, 1f);
         goalPinImg.raycastTarget = false;
 
-        // Penanda posisi kapal yang meluncur sepanjang bar
+        // 5. Ikon kapal yang meluncur sepanjang bar (BOAT PROGRES)
         GameObject markerGo = new GameObject("BoatMarker", typeof(RectTransform), typeof(Image));
         markerGo.transform.SetParent(fillTrackRect, false);
         boatMarker = markerGo.GetComponent<RectTransform>();
         boatMarker.anchorMin = new Vector2(0f, 0.5f);
         boatMarker.anchorMax = new Vector2(0f, 0.5f);
         boatMarker.pivot = new Vector2(0.5f, 0.5f);
-        boatMarker.sizeDelta = new Vector2(16f, 22f);
-        boatMarker.anchoredPosition = Vector2.zero;
+        boatMarker.sizeDelta = boatMarkerSize;
+        boatMarker.anchoredPosition = new Vector2(boatMarkerSize.x * 0.35f, 0f);
 
         Image markerImg = markerGo.GetComponent<Image>();
-        markerImg.color = markerColor;
+        markerImg.sprite = boatMarkerSprite;
+        markerImg.preserveAspect = true;
+        markerImg.color = boatMarkerSprite != null ? Color.white : new Color(1f, 0.94f, 0.72f, 1f);
         markerImg.raycastTarget = false;
 
-        // Teks status persentase & sisa jarak di bawah track
-        GameObject textGo = new GameObject("StatusText", typeof(RectTransform));
-        textGo.transform.SetParent(barRoot, false);
-        statusText = textGo.AddComponent<TextMeshProUGUI>();
-        if (fontAsset != null) statusText.font = fontAsset;
-        statusText.fontSize = 18f;
-        statusText.fontStyle = FontStyles.Bold;
-        statusText.alignment = TextAlignmentOptions.Center;
-        statusText.color = new Color(0.96f, 0.96f, 0.94f, 1f);
-        statusText.raycastTarget = false;
+        // 6. Teks persentase & jarak yang ringkas di bawah bar (opsional)
+        if (showStatusText)
+        {
+            GameObject textGo = new GameObject("StatusText", typeof(RectTransform));
+            textGo.transform.SetParent(barRoot, false);
+            statusText = textGo.AddComponent<TextMeshProUGUI>();
+            if (fontAsset != null) statusText.font = fontAsset;
+            statusText.fontSize = 18f;
+            statusText.fontStyle = FontStyles.Bold;
+            statusText.alignment = TextAlignmentOptions.Center;
+            statusText.color = Color.white;
+            statusText.outlineWidth = 0.22f;
+            statusText.outlineColor = new Color(0.18f, 0.14f, 0.10f, 0.92f);
+            statusText.raycastTarget = false;
 
-        RectTransform textRt = statusText.rectTransform;
-        textRt.anchorMin = new Vector2(0f, 0f);
-        textRt.anchorMax = new Vector2(1f, 0f);
-        textRt.pivot = new Vector2(0.5f, 0f);
-        textRt.sizeDelta = new Vector2(-24f, 24f);
-        textRt.anchoredPosition = new Vector2(0f, 4f);
+            RectTransform textRt = statusText.rectTransform;
+            textRt.anchorMin = new Vector2(0f, 0f);
+            textRt.anchorMax = new Vector2(1f, 0f);
+            textRt.pivot = new Vector2(0.5f, 0f);
+            textRt.sizeDelta = new Vector2(0f, 24f);
+            textRt.anchoredPosition = Vector2.zero;
+        }
     }
 }
-
