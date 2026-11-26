@@ -131,8 +131,8 @@ public class LassoController : NetworkBehaviour
 
     private void HandleOwnerInput()
     {
-        // Tahan input laso sampai seluruh pemain selesai spawn, atau saat sedang tenggelam/respawn
-        if (!GameSpawner.IsMatchReady || (playerMovement != null && playerMovement.IsRespawning))
+        // Tahan input laso sampai seluruh pemain selesai spawn, atau saat sedang jatuh/tenggelam/respawn
+        if (!GameSpawner.IsMatchReady || (playerMovement != null && (playerMovement.IsRespawning || playerMovement.IsOffBoatOrRespawning)))
         {
             isLocalAiming = false;
             return;
@@ -358,7 +358,7 @@ public class LassoController : NetworkBehaviour
     [ServerRpc]
     private void ThrowLassoServerRpc(Vector3 landingPoint)
     {
-        if (netState.Value != LassoState.Idle) return;
+        if (!GameSpawner.IsMatchReady || netState.Value != LassoState.Idle) return;
 
         // Server-side range validation: never trust a client-supplied landing point.
         if (FlatDistance(transform.position, landingPoint) > lassoRange + 0.25f)

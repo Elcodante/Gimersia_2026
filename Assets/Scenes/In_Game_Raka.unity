@@ -4633,79 +4633,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HookableTarget
   canBeHooked: 0
---- !u!21 &546820515
-Material:
-  serializedVersion: 8
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: Shader Graphs_River_Water_v4 (Instance)
-  m_Shader: {fileID: -6465566751694194690, guid: e08b36dcbbafebb449a1343d579be8d6, type: 3}
-  m_Parent: {fileID: 0}
-  m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
-  m_InvalidKeywords: []
-  m_LightmapFlags: 2
-  m_EnableInstancingVariants: 0
-  m_DoubleSidedGI: 0
-  m_CustomRenderQueue: -1
-  stringTagMap: {}
-  disabledShaderPasses:
-  - MOTIONVECTORS
-  m_LockedProperties: 
-  m_SavedProperties:
-    serializedVersion: 3
-    m_TexEnvs:
-    - _ObstacleMap:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    - unity_Lightmaps:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    - unity_LightmapsInd:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    - unity_ShadowMasks:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    m_Ints: []
-    m_Floats:
-    - _DeepAlpha: 1
-    - _DepthDistance: 3
-    - _FlowSpeed: 0.4
-    - _FoamBand: 0.6
-    - _FoamBandDistance: 1
-    - _FoamDistance: 0.99
-    - _FoamNoise: 0.87
-    - _GlintFarEnd: 80
-    - _GlintFarStart: -40
-    - _GlintNearCut: 0
-    - _GlintNearFade: 2
-    - _NormalStrength: 3
-    - _ObstacleFoamWidth: 0.38
-    - _ObstacleMaxDist: 4
-    - _QueueControl: 0
-    - _QueueOffset: 0
-    - _ShallowAlpha: 0.75
-    - _ShearStrength: 0.03
-    - _SparkleSmoothness: 0.85
-    - _TurbRipple: 1.5
-    - _WakeFoam: 0.9
-    - _WakeNoise: 0.9
-    m_Colors:
-    - _DeepColor: {r: 0.079999976, g: 0.54999995, b: 0.62, a: 1}
-    - _FoamColor: {r: 1, g: 1, b: 1, a: 1}
-    - _MapOrigin: {r: -534.4785, g: -402.0966, b: 0, a: 0}
-    - _MapSize: {r: 824.39886, g: 881.72363, b: 0, a: 0}
-    - _ShallowColor: {r: 0.39999998, g: 0.85, b: 0.78, a: 1}
-    - _WaveTiling: {r: 13, g: 4, b: 0, a: 0}
-  m_BuildTextureStacks: []
-  m_AllowLocking: 1
 --- !u!1 &560021021
 GameObject:
   m_ObjectHideFlags: 0
@@ -4813,8 +4740,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
   m_RenderShadows: 1
-  m_RequiresDepthTextureOption: 2
-  m_RequiresOpaqueTextureOption: 2
+  m_RequiresDepthTextureOption: 1
+  m_RequiresOpaqueTextureOption: 1
   m_CameraType: 0
   m_Cameras: []
   m_RendererIndex: -1
@@ -4834,8 +4761,8 @@ MonoBehaviour:
   m_UseScreenCoordOverride: 0
   m_ScreenSizeOverride: {x: 0, y: 0, z: 0, w: 0}
   m_ScreenCoordScaleBias: {x: 0, y: 0, z: 0, w: 0}
-  m_RequiresDepthTexture: 0
-  m_RequiresColorTexture: 0
+  m_RequiresDepthTexture: 1
+  m_RequiresColorTexture: 1
   m_TaaSettings:
     m_Quality: 3
     m_FrameInfluence: 0.1
@@ -18735,7 +18662,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 546820515}
+  - {fileID: 2100000, guid: 8b2d67bf64e29b841909bb0869a4b810, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -21213,6 +21140,102 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: f5be906da6a86e943a06de19505b00ff, type: 3}
+--- !u!1 &1995000101
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1995000102}
+  - component: {fileID: 1995000103}
+  - component: {fileID: 1995000104}
+  m_Layer: 0
+  m_Name: FishEventSystem
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1995000102
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1995000101}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1995000103
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1995000101}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
+  GlobalObjectIdHash: 3182947501
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  m_InScenePlacedDisabledByDefault: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  m_InScenePlaced: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 0
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
+--- !u!114 &1995000104
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1995000101}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f1540002a9c24b8e9d710a2b3c4d5e02, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FishEventController
+  ShowTopMostFoldoutHeaderGroup: 1
+  fishPrefab: {fileID: 5510000000000000003, guid: f1540004a9c24b8e9d710a2b3c4d5e04, type: 3}
+  poolCapacity: 8
+  initialGraceSeconds: 4
+  minWaveInterval: 4.5
+  maxWaveInterval: 10.5
+  minBurstSpacing: 0.7
+  maxBurstSpacing: 1.4
+  maxBurstCount: 3
+  minSpawnRadius: 7.5
+  maxSpawnRadius: 11.5
+  submergeDepth: 1.6
+  minTelegraphDuration: 0.35
+  maxTelegraphDuration: 0.55
+  minFlightDuration: 0.95
+  maxFlightDuration: 1.3
+  overshootRatio: 0.85
+  boatVelocityLead: 0.65
+  hitRadius: 1.15
+  knockbackHorizontalSpeed: 8.5
+  knockbackUpwardSpeed: 4.6
+  fishBounceBackSpeed: 6.5
+  fishBounceUpSpeed: 6.2
+  hitImpactSfxId: boat_impact
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -21264,3 +21287,4 @@ SceneRoots:
   - {fileID: 643203923}
   - {fileID: 1341497631}
   - {fileID: 950063517}
+  - {fileID: 1995000102}

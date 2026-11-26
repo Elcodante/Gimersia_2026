@@ -34,6 +34,10 @@ public class RiverCameraDirector : MonoBehaviour
     [Tooltip("Bobot arah look-ahead dibanding arah sungai tepat di posisi kapal (0 = lokal, 1 = penuh ke depan).")]
     [SerializeField, Range(0f, 1f)] private float lookAheadBlend = 0.65f;
 
+    [Header("Intro Flyover Sungai")]
+    [Tooltip("Aktifkan kamera intro yang menampilkan tujuan akhir lalu meluncur menelusuri sungai ke kapal di awal game.")]
+    [SerializeField] private bool enableIntroFlyover = true;
+
     [Header("Kehalusan & Efisiensi (WebGL)")]
     [Tooltip("Waktu smoothing rotasi horizontal kamera (detik). Lebih besar = lebih lembut dan tidak bikin pusing.")]
     [SerializeField, Range(0.15f, 2.5f)] private float yawSmoothTime = 0.85f;
@@ -79,6 +83,12 @@ public class RiverCameraDirector : MonoBehaviour
         currentYaw = transform.eulerAngles.y;
         targetYaw = currentYaw;
         initialized = true;
+
+        // Pasang RiverIntroCamera otomatis jika belum ditambahkan secara manual di Inspector
+        if (enableIntroFlyover && GetComponent<RiverIntroCamera>() == null)
+        {
+            gameObject.AddComponent<RiverIntroCamera>();
+        }
     }
 
     private void Start()

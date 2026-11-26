@@ -93,7 +93,10 @@ public class RiverObstacleMap : MonoBehaviour
     public void Bake()
     {
         baked = false;
-        if (!waterMaterial) return;
+        MeshRenderer mr = GetComponent<MeshRenderer>();
+        Material rendererMat = mr != null ? mr.sharedMaterial : null;
+        if (!waterMaterial) waterMaterial = rendererMat;
+        if (!waterMaterial && !rendererMat) return;
         riverRef = GetComponent<RiverPath>();
         var sc = GetComponent<SplineContainer>();
         if (!riverRef || !sc) return;
@@ -172,10 +175,9 @@ public class RiverObstacleMap : MonoBehaviour
         tex.SetPixels32(pix);
         tex.Apply(false);
 
-        waterMaterial.SetTexture("_ObstacleMap", tex);
-        waterMaterial.SetVector("_MapOrigin", new Vector4(min.x, min.y, 0f, 0f));
-        waterMaterial.SetVector("_MapSize", new Vector4(size.x, size.y, 0f, 0f));
-        waterMaterial.SetFloat("_ObstacleMaxDist", maxDistance);
+        ApplyMapToMaterial(waterMaterial, min, size);
+        if (rendererMat != null && rendererMat != waterMaterial)
+            ApplyMapToMaterial(rendererMat, min, size);
 
         prevRegions.Clear();
         dynCols.Clear();
@@ -184,6 +186,15 @@ public class RiverObstacleMap : MonoBehaviour
         baked = true;
 
         Debug.Log($"[RiverObstacleMap] {list.Count} rintangan statis di-bake ({res}x{res}).", this);
+    }
+
+    void ApplyMapToMaterial(Material mat, Vector2 min, Vector2 size)
+    {
+        if (mat == null) return;
+        mat.SetTexture("_ObstacleMap", tex);
+        mat.SetVector("_MapOrigin", new Vector4(min.x, min.y, 0f, 0f));
+        mat.SetVector("_MapSize", new Vector4(size.x, size.y, 0f, 0f));
+        mat.SetFloat("_ObstacleMaxDist", maxDistance);
     }
 
     // ------------------------------------------------------------------ DINAMIS (kapal, sampah)

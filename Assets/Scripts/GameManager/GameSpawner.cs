@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
@@ -10,6 +11,12 @@ public class GameSpawner : NetworkBehaviour
 {
     public static GameSpawner Instance { get; private set; }
 
+    /// <summary>Dipicu di semua client (termasuk Host) saat seluruh pemain siap dan kamera intro sungai dimulai.</summary>
+    public static event Action OnIntroStarted;
+
+    /// <summary>Dipicu di semua client (termasuk Host) saat kamera intro sungai selesai dan permainan dimulai.</summary>
+    public static event Action OnIntroFinished;
+
     [Header("Pengaturan Spawn")]
     [SerializeField] private GameObject playerPrefab;
     [SerializeField] private Transform[] spawnPoints;
@@ -19,12 +26,19 @@ public class GameSpawner : NetworkBehaviour
     [Tooltip("Interval diagnostik saat menunggu semua client selesai membuat world. Match tidak akan dipaksa mulai saat timeout.")]
     [SerializeField] private float maxWaitForAllPlayersSeconds = 30f;
 
+    [Header("Kamera Intro Sungai")]
+    [Tooltip("Tampilkan kamera tujuan akhir lalu meluncur menelusuri sungai ke kapal setelah semua pemain siap.")]
+    [SerializeField] private bool playRiverIntroCamera = true;
+    [Tooltip("Durasi cadangan intro jika komponen RiverIntroCamera belum ditemukan (detik).")]
+    [SerializeField, Min(1f)] private float fallbackIntroDurationSeconds = 7.4f;
+
     [Header("Debug - Reproducible World Seed")]
     [Tooltip("Aktifkan hanya saat mengetes di Unity Editor. Semua client dalam sesi development harus memakai nilai seed yang sama.")]
     [SerializeField] private bool useFixedWorldSeedInEditor = false;
     [SerializeField] private int fixedEditorWorldSeed = 20261126;
 
     public NetworkVariable<bool> IsMatchStarted = new NetworkVariable<bool>(false);
+    public NetworkVariable<bool> IsIntroPlaying = new NetworkVariable<bool>(false);
     public NetworkVariable<int> ReadyPlayerCount = new NetworkVariable<int>(0);
     public NetworkVariable<int> ExpectedPlayerCount = new NetworkVariable<int>(1);
     public NetworkVariable<int> WorldSeed = new NetworkVariable<int>(
@@ -32,22 +46,33 @@ public class GameSpawner : NetworkBehaviour
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server);
 
-    /// <summary>True jika world lokal selesai dibuat dan seluruh pemain sudah memulai match.</summary>
+    /// <summary>True jika world lokal selesai dibuat, kamera intro selesai, dan seluruh pemain sudah memulai match.</summary>
     public static bool IsMatchReady => Instance == null || (Instance.localWorldReady && Instance.IsMatchStarted.Value);
+    public static bool IsIntroActive => Instance != null && Instance.IsIntroPlaying.Value;
     public bool IsLocalWorldReady => localWorldReady;
 
     private readonly HashSet<ulong> spawnedClientIds = new HashSet<ulong>();
     private readonly HashSet<ulong> readyClientIds = new HashSet<ulong>();
     private readonly Dictionary<ulong, int> assignedCharacterSlots = new Dictionary<ulong, int>();
     private bool sceneLoadEventReceived = false;
+    private bool introTriggeredOnServer = false;
     private float waitTimer = 0f;
     private bool localWorldReady;
     private Coroutine worldBuildRoutine;
+    private Coroutine serverIntroRoutine;
 
     private GameObject waitingOverlayObj;
     private TMP_Text waitingStatusText;
     private CanvasGroup waitingCanvasGroup;
     private Coroutine hideOverlayCoroutine;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        Instance = null;
+        OnIntroStarted = null;
+        OnIntroFinished = null;
+    }
 
     private void Awake()
     {
@@ -67,6 +92,7 @@ public class GameSpawner : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         IsMatchStarted.OnValueChanged += OnMatchStartedChanged;
+        IsIntroPlaying.OnValueChanged += OnIntroPlayingChanged;
         ReadyPlayerCount.OnValueChanged += OnProgressChanged;
         ExpectedPlayerCount.OnValueChanged += OnProgressChanged;
 
@@ -75,6 +101,8 @@ public class GameSpawner : NetworkBehaviour
         if (IsServer)
         {
             IsMatchStarted.Value = false;
+            IsIntroPlaying.Value = false;
+            introTriggeredOnServer = false;
             spawnedClientIds.Clear();
             readyClientIds.Clear();
             assignedCharacterSlots.Clear();
@@ -110,9 +138,16 @@ public class GameSpawner : NetworkBehaviour
             StopCoroutine(worldBuildRoutine);
             worldBuildRoutine = null;
         }
+        if (serverIntroRoutine != null)
+        {
+            StopCoroutine(serverIntroRoutine);
+            serverIntroRoutine = null;
+        }
         localWorldReady = false;
+        introTriggeredOnServer = false;
 
         IsMatchStarted.OnValueChanged -= OnMatchStartedChanged;
+        IsIntroPlaying.OnValueChanged -= OnIntroPlayingChanged;
         ReadyPlayerCount.OnValueChanged -= OnProgressChanged;
         ExpectedPlayerCount.OnValueChanged -= OnProgressChanged;
 
@@ -176,7 +211,7 @@ public class GameSpawner : NetworkBehaviour
 
     private void Update()
     {
-        if (!IsServer || !IsSpawned || IsMatchStarted.Value || !localWorldReady) return;
+        if (!IsServer || !IsSpawned || IsMatchStarted.Value || IsIntroPlaying.Value || !localWorldReady) return;
 
         waitTimer += Time.unscaledDeltaTime;
 
@@ -217,6 +252,11 @@ public class GameSpawner : NetworkBehaviour
         GameObject playerInstance = Instantiate(playerPrefab, spawnPoint.position, spawnPoint.rotation);
 
         NetworkObject netObj = playerInstance.GetComponent<NetworkObject>();
+
+        // Tandai clientId sudah di-spawn SEBELUM SpawnAsPlayerObject dipanggil.
+        // Pada Host, SpawnAsPlayerObject langsung memicu PlayerMovement.OnNetworkSpawn()
+        // yang secara sinkron memanggil NotifyClientPlayerReadyRpc() sebelum baris di bawah ini selesai.
+        spawnedClientIds.Add(clientId);
         netObj.SpawnAsPlayerObject(clientId, true);
 
         // Berikan slot karakter unik per pemain (disinkronkan otomatis lewat NetworkVariable)
@@ -227,12 +267,10 @@ public class GameSpawner : NetworkBehaviour
         }
 
         // Kaitkan pemain sebagai child dari kapal dengan worldPositionStays = true
-        if (perahuNetworkObject != null)
+        if (perahuNetworkObject != null && netObj.transform.parent != perahuNetworkObject.transform)
         {
             netObj.TrySetParent(perahuNetworkObject, true);
         }
-
-        spawnedClientIds.Add(clientId);
     }
 
     private int AllocateUniqueCharacterSlot(ulong clientId)
@@ -271,19 +309,36 @@ public class GameSpawner : NetworkBehaviour
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     public void NotifyClientPlayerReadyRpc(RpcParams rpcParams = default)
     {
-        if (!IsServer || IsMatchStarted.Value) return;
+        if (!IsServer || IsMatchStarted.Value || IsIntroPlaying.Value || NetworkManager.Singleton == null) return;
 
         ulong senderId = rpcParams.Receive.SenderClientId;
-        if (!localWorldReady || !spawnedClientIds.Contains(senderId)) return;
-        readyClientIds.Add(senderId);
-        Debug.Log($"[GameSpawner] Client {senderId} siap ({readyClientIds.Count}/{NetworkManager.Singleton.ConnectedClientsIds.Count}).");
+        if (!IsClientConnected(senderId)) return;
+
+        // Catat kesiapan client walaupun server masih menyelesaikan PrepareLocalWorldRoutine()
+        // atau urutan spawn baru saja berlangsung, agar sinyal siap tidak pernah terbuang.
+        bool newlyReady = readyClientIds.Add(senderId);
+        if (newlyReady)
+        {
+            Debug.Log($"[GameSpawner] Client {senderId} siap ({readyClientIds.Count}/{NetworkManager.Singleton.ConnectedClientsIds.Count}).");
+        }
 
         RefreshExpectedAndCheckStart();
     }
 
+    private bool IsClientConnected(ulong clientId)
+    {
+        if (NetworkManager.Singleton == null) return false;
+        var connected = NetworkManager.Singleton.ConnectedClientsIds;
+        for (int i = 0; i < connected.Count; i++)
+        {
+            if (connected[i] == clientId) return true;
+        }
+        return false;
+    }
+
     private void RefreshExpectedAndCheckStart()
     {
-        if (!IsServer || IsMatchStarted.Value || !localWorldReady || NetworkManager.Singleton == null) return;
+        if (!IsServer || IsMatchStarted.Value || NetworkManager.Singleton == null) return;
 
         var connected = NetworkManager.Singleton.ConnectedClientsIds;
         int expected = Mathf.Max(1, connected.Count);
@@ -312,22 +367,77 @@ public class GameSpawner : NetworkBehaviour
 
         ReadyPlayerCount.Value = readyConnectedCount;
 
-        if (allSpawned && allReady && connected.Count > 0)
+        if (localWorldReady && allSpawned && allReady && connected.Count > 0)
+        {
+            BeginIntroOrStartMatchOnServer();
+        }
+    }
+
+    private void BeginIntroOrStartMatchOnServer()
+    {
+        if (!IsServer || IsMatchStarted.Value || introTriggeredOnServer || !localWorldReady) return;
+
+        if (playRiverIntroCamera && RiverIntroCamera.CanPlayIntro)
+        {
+            introTriggeredOnServer = true;
+            IsIntroPlaying.Value = true;
+            Debug.Log($"[GameSpawner] Seluruh pemain siap ({ReadyPlayerCount.Value}/{ExpectedPlayerCount.Value}). Memulai kamera intro sungai...");
+
+            if (serverIntroRoutine != null) StopCoroutine(serverIntroRoutine);
+            serverIntroRoutine = StartCoroutine(ServerIntroSequenceRoutine());
+        }
+        else
         {
             StartMatchOnServer();
         }
     }
 
+    private IEnumerator ServerIntroSequenceRoutine()
+    {
+        float duration = RiverIntroCamera.Instance != null
+            ? RiverIntroCamera.Instance.TotalDuration
+            : fallbackIntroDurationSeconds;
+
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Mathf.Min(Time.unscaledDeltaTime, 0.05f);
+            yield return null;
+        }
+
+        serverIntroRoutine = null;
+        IsIntroPlaying.Value = false;
+        StartMatchOnServer();
+    }
+
     private void StartMatchOnServer()
     {
         if (IsMatchStarted.Value || !localWorldReady) return;
+        IsIntroPlaying.Value = false;
         IsMatchStarted.Value = true;
         Debug.Log($"[GameSpawner] Seluruh pemain siap ({ReadyPlayerCount.Value}/{ExpectedPlayerCount.Value}). Permainan dimulai!");
+    }
+
+    private void OnIntroPlayingChanged(bool previous, bool current)
+    {
+        UpdateWaitingOverlayVisual();
+        if (current)
+        {
+            OnIntroStarted?.Invoke();
+        }
+        else if (previous)
+        {
+            OnIntroFinished?.Invoke();
+        }
     }
 
     private void OnMatchStartedChanged(bool previous, bool current)
     {
         UpdateWaitingOverlayVisual();
+        if (current)
+        {
+            OnIntroFinished?.Invoke();
+        }
     }
 
     private void OnProgressChanged(int previous, int current)
@@ -339,7 +449,7 @@ public class GameSpawner : NetworkBehaviour
     {
         if (waitingOverlayObj == null) return;
 
-        bool waiting = !localWorldReady || !IsMatchStarted.Value;
+        bool waiting = !localWorldReady || (!IsMatchStarted.Value && !IsIntroPlaying.Value);
         if (waiting)
         {
             if (hideOverlayCoroutine != null)
