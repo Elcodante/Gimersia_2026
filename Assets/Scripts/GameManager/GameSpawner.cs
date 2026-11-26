@@ -16,21 +16,33 @@ public class GameSpawner : NetworkBehaviour
     [SerializeField] private NetworkObject perahuNetworkObject;
 
     [Header("Sinkronisasi Mulai Permainan")]
-    [Tooltip("Batas waktu maksimal (detik) menunggu seluruh client selesai spawn agar tidak softlock jika ada yang terputus.")]
-    [SerializeField] private float maxWaitForAllPlayersSeconds = 15f;
+    [Tooltip("Interval diagnostik saat menunggu semua client selesai membuat world. Match tidak akan dipaksa mulai saat timeout.")]
+    [SerializeField] private float maxWaitForAllPlayersSeconds = 30f;
+
+    [Header("Debug - Reproducible World Seed")]
+    [Tooltip("Aktifkan hanya saat mengetes di Unity Editor. Semua client dalam sesi development harus memakai nilai seed yang sama.")]
+    [SerializeField] private bool useFixedWorldSeedInEditor = false;
+    [SerializeField] private int fixedEditorWorldSeed = 20261126;
 
     public NetworkVariable<bool> IsMatchStarted = new NetworkVariable<bool>(false);
     public NetworkVariable<int> ReadyPlayerCount = new NetworkVariable<int>(0);
     public NetworkVariable<int> ExpectedPlayerCount = new NetworkVariable<int>(1);
+    public NetworkVariable<int> WorldSeed = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
 
-    /// <summary>True jika seluruh pemain sudah selesai spawn di scene dan permainan sudah dimulai.</summary>
-    public static bool IsMatchReady => Instance == null || Instance.IsMatchStarted.Value;
+    /// <summary>True jika world lokal selesai dibuat dan seluruh pemain sudah memulai match.</summary>
+    public static bool IsMatchReady => Instance == null || (Instance.localWorldReady && Instance.IsMatchStarted.Value);
+    public bool IsLocalWorldReady => localWorldReady;
 
     private readonly HashSet<ulong> spawnedClientIds = new HashSet<ulong>();
     private readonly HashSet<ulong> readyClientIds = new HashSet<ulong>();
     private readonly Dictionary<ulong, int> assignedCharacterSlots = new Dictionary<ulong, int>();
     private bool sceneLoadEventReceived = false;
     private float waitTimer = 0f;
+    private bool localWorldReady;
+    private Coroutine worldBuildRoutine;
 
     private GameObject waitingOverlayObj;
     private TMP_Text waitingStatusText;
@@ -58,6 +70,8 @@ public class GameSpawner : NetworkBehaviour
         ReadyPlayerCount.OnValueChanged += OnProgressChanged;
         ExpectedPlayerCount.OnValueChanged += OnProgressChanged;
 
+        localWorldReady = false;
+
         if (IsServer)
         {
             IsMatchStarted.Value = false;
@@ -69,9 +83,17 @@ public class GameSpawner : NetworkBehaviour
             ExpectedPlayerCount.Value = Mathf.Max(1, NetworkManager.Singleton.ConnectedClientsIds.Count);
             ReadyPlayerCount.Value = 0;
 
-            NetworkManager.Singleton.SceneManager.OnLoadEventCompleted += HandleSceneLoaded;
+            // Legacy compatibility only. The level is baked in the gameplay scene,
+            // so runtime session/room seeds no longer control obstacle placement.
+            WorldSeed.Value = 1;
+
+            if (NetworkManager.Singleton.SceneManager != null)
+                NetworkManager.Singleton.SceneManager.OnLoadEventCompleted += HandleSceneLoaded;
             NetworkManager.Singleton.OnClientDisconnectCallback += HandleClientDisconnected;
         }
+
+        if (worldBuildRoutine != null) StopCoroutine(worldBuildRoutine);
+        worldBuildRoutine = StartCoroutine(PrepareLocalWorldRoutine());
 
         UpdateWaitingOverlayVisual();
 
@@ -83,6 +105,13 @@ public class GameSpawner : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
+        if (worldBuildRoutine != null)
+        {
+            StopCoroutine(worldBuildRoutine);
+            worldBuildRoutine = null;
+        }
+        localWorldReady = false;
+
         IsMatchStarted.OnValueChanged -= OnMatchStartedChanged;
         ReadyPlayerCount.OnValueChanged -= OnProgressChanged;
         ExpectedPlayerCount.OnValueChanged -= OnProgressChanged;
@@ -97,17 +126,66 @@ public class GameSpawner : NetworkBehaviour
         }
     }
 
+    private IEnumerator PrepareLocalWorldRoutine()
+    {
+        // Level sudah di-bake di Editor dan tersimpan sebagai scene objects.
+        // Tunggu sampai NGO selesai mem-spawn NetworkObject yang ditanam di scene
+        // (terutama sampah hookable yang memakai TrashObstacle).
+        const float spawnWaitTimeout = 10f;
+        float waited = 0f;
+        bool allSceneTrashSpawned = false;
+
+        while (waited < spawnWaitTimeout)
+        {
+            allSceneTrashSpawned = true;
+            TrashObstacle[] sceneTrash = FindObjectsByType<TrashObstacle>(FindObjectsSortMode.None);
+            for (int i = 0; i < sceneTrash.Length; i++)
+            {
+                TrashObstacle trash = sceneTrash[i];
+                if (trash == null || trash.gameObject.scene != gameObject.scene) continue;
+                if (!trash.IsSpawned)
+                {
+                    allSceneTrashSpawned = false;
+                    break;
+                }
+            }
+
+            if (allSceneTrashSpawned) break;
+            waited += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (!allSceneTrashSpawned)
+        {
+            Debug.LogError(
+                "[GameSpawner] Ada TrashObstacle scene object yang belum di-spawn oleh NGO. " +
+                "Pastikan Enable Scene Management aktif dan gameplay scene dimuat melalui NetworkManager.SceneManager.", this);
+        }
+
+        // World static is ready; no runtime generation, random seed, or loading stage is needed.
+        localWorldReady = true;
+        worldBuildRoutine = null;
+        Debug.Log("[GameSpawner] Static scene world ready. Server: " + IsServer, this);
+        UpdateWaitingOverlayVisual();
+
+        if (IsServer)
+        {
+            RefreshExpectedAndCheckStart();
+        }
+    }
+
     private void Update()
     {
-        if (!IsServer || !IsSpawned || IsMatchStarted.Value) return;
+        if (!IsServer || !IsSpawned || IsMatchStarted.Value || !localWorldReady) return;
 
         waitTimer += Time.unscaledDeltaTime;
 
-        // Pengaman: jika proses spawn client melewati batas waktu maksimal, mulai permainan untuk yang sudah hadir
+        // Never force-start while a connected client may still be generating its local world.
+        // A timeout is diagnostic only; disconnected clients are removed through the disconnect callback.
         if (sceneLoadEventReceived && waitTimer >= maxWaitForAllPlayersSeconds)
         {
-            Debug.LogWarning($"[GameSpawner] Timeout menunggu seluruh client siap ({readyClientIds.Count}/{ExpectedPlayerCount.Value}). Memulai permainan.");
-            StartMatchOnServer();
+            Debug.LogWarning($"[GameSpawner] Masih menunggu kesiapan world/player ({readyClientIds.Count}/{ExpectedPlayerCount.Value}). Match tetap ditahan agar layout tidak desinkron.");
+            waitTimer = 0f;
         }
     }
 
@@ -196,6 +274,7 @@ public class GameSpawner : NetworkBehaviour
         if (!IsServer || IsMatchStarted.Value) return;
 
         ulong senderId = rpcParams.Receive.SenderClientId;
+        if (!localWorldReady || !spawnedClientIds.Contains(senderId)) return;
         readyClientIds.Add(senderId);
         Debug.Log($"[GameSpawner] Client {senderId} siap ({readyClientIds.Count}/{NetworkManager.Singleton.ConnectedClientsIds.Count}).");
 
@@ -204,7 +283,7 @@ public class GameSpawner : NetworkBehaviour
 
     private void RefreshExpectedAndCheckStart()
     {
-        if (!IsServer || IsMatchStarted.Value || NetworkManager.Singleton == null) return;
+        if (!IsServer || IsMatchStarted.Value || !localWorldReady || NetworkManager.Singleton == null) return;
 
         var connected = NetworkManager.Singleton.ConnectedClientsIds;
         int expected = Mathf.Max(1, connected.Count);
@@ -241,7 +320,7 @@ public class GameSpawner : NetworkBehaviour
 
     private void StartMatchOnServer()
     {
-        if (IsMatchStarted.Value) return;
+        if (IsMatchStarted.Value || !localWorldReady) return;
         IsMatchStarted.Value = true;
         Debug.Log($"[GameSpawner] Seluruh pemain siap ({ReadyPlayerCount.Value}/{ExpectedPlayerCount.Value}). Permainan dimulai!");
     }
@@ -260,7 +339,7 @@ public class GameSpawner : NetworkBehaviour
     {
         if (waitingOverlayObj == null) return;
 
-        bool waiting = !IsMatchStarted.Value;
+        bool waiting = !localWorldReady || !IsMatchStarted.Value;
         if (waiting)
         {
             if (hideOverlayCoroutine != null)
@@ -274,11 +353,18 @@ public class GameSpawner : NetworkBehaviour
 
             if (waitingStatusText != null)
             {
-                int ready = ReadyPlayerCount.Value;
-                int expected = Mathf.Max(1, ExpectedPlayerCount.Value);
-                waitingStatusText.text = expected > 1
-                    ? $"Menunggu semua pemain masuk... ({ready}/{expected})"
-                    : "Menyiapkan permainan...";
+                if (!localWorldReady)
+                {
+                    waitingStatusText.text = "Menyiapkan dunia sungai...";
+                }
+                else
+                {
+                    int ready = ReadyPlayerCount.Value;
+                    int expected = Mathf.Max(1, ExpectedPlayerCount.Value);
+                    waitingStatusText.text = expected > 1
+                        ? $"Menunggu semua pemain siap... ({ready}/{expected})"
+                        : "Menyiapkan permainan...";
+                }
             }
         }
         else if (waitingOverlayObj.activeSelf)

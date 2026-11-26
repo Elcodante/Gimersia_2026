@@ -69,6 +69,7 @@ public class MainMenuController : MonoBehaviour
     private async void Start()
     {
         IsSoloMode = false;
+        RiverWorldSeedContext.ClearRoomCode();
 
         if (panelTransitioner != null)
         {
@@ -274,6 +275,7 @@ public class MainMenuController : MonoBehaviour
     {
         if (NetworkManager.Singleton == null) return;
 
+        RiverWorldSeedContext.ClearRoomCode();
         buttonPlaySolo.interactable = false;
         IsSoloMode = true;
         LocalPlayerName = string.Empty;
@@ -369,6 +371,7 @@ public class MainMenuController : MonoBehaviour
             }
 
             lobbyUIJuice?.ResetSlots();
+            RiverWorldSeedContext.SetRoomCode(joinCode);
 
             if (NetworkManager.Singleton.StartHost())
             {
@@ -379,11 +382,13 @@ public class MainMenuController : MonoBehaviour
             }
             else
             {
+                RiverWorldSeedContext.ClearRoomCode();
                 ValidateNameInput(inputFieldNama.text);
             }
         }
         catch (Exception e)
         {
+            RiverWorldSeedContext.ClearRoomCode();
             Debug.LogError($"Gagal membuat Host: {e.Message}");
             ValidateNameInput(inputFieldNama.text);
         }
@@ -487,6 +492,7 @@ public class MainMenuController : MonoBehaviour
 
     private void AbortPendingClientJoin()
     {
+        RiverWorldSeedContext.ClearRoomCode();
         isWaitingForClientConnect = false;
         pendingJoinCode = string.Empty;
 
@@ -582,6 +588,7 @@ public class MainMenuController : MonoBehaviour
 
     private async void LeaveLobby()
     {
+        RiverWorldSeedContext.ClearRoomCode();
         buttonExitHost.interactable = false;
 
         if (NetworkManager.Singleton != null && (NetworkManager.Singleton.IsConnectedClient || NetworkManager.Singleton.IsHost))

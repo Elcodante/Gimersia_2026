@@ -72,6 +72,7 @@ public class TrashObstacle : NetworkBehaviour
     private Vector3 shakeOffset;
     private float bobPhase;
     private Coroutine shakeCoroutine;
+    private static PhysicsMaterial sharedTrashSlideMaterial;
 
     /// <summary>True jika sampah sudah tidak bisa jadi target laso (terlepas dan hanyut, atau sudah dihapus).</summary>
     public bool IsCleared => isCleared || isFreed;
@@ -91,17 +92,22 @@ public class TrashObstacle : NetworkBehaviour
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.isKinematic = true; // server baru mengaktifkan fisika di OnNetworkSpawn
 
-        // Licin: meluncur di sisi batu/kapal, tidak menempel
-        var slide = new PhysicsMaterial("TrashSlide")
+        // Licin: meluncur di sisi batu/kapal, tidak menempel. Reuse one material asset
+        // instead of allocating a new PhysicsMaterial for every spawned trash/proxy.
+        if (sharedTrashSlideMaterial == null)
         {
-            dynamicFriction = 0.05f,
-            staticFriction = 0.05f,
-            bounciness = 0.1f,
-            frictionCombine = PhysicsMaterialCombine.Minimum,
-            bounceCombine = PhysicsMaterialCombine.Average
-        };
+            sharedTrashSlideMaterial = new PhysicsMaterial("TrashSlide")
+            {
+                dynamicFriction = 0.05f,
+                staticFriction = 0.05f,
+                bounciness = 0.1f,
+                frictionCombine = PhysicsMaterialCombine.Minimum,
+                bounceCombine = PhysicsMaterialCombine.Average
+            };
+        }
+
         foreach (var c in GetComponentsInChildren<Collider>())
-            if (!c.isTrigger) c.sharedMaterial = slide;
+            if (!c.isTrigger) c.sharedMaterial = sharedTrashSlideMaterial;
     }
 
     // Getaran harus di child visual, BUKAN di root (root digerakkan fisika dan Rigidbody)

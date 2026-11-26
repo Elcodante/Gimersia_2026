@@ -93,19 +93,29 @@ public class PlayerMovement : NetworkBehaviour
 
     private IEnumerator ReportReadyWhenParentedRoutine()
     {
-        // Tunggu singkat hingga parenting ke kapal & GameSpawner tereplikasi ke client sebelum melapor siap
+        // World generation is a prerequisite for player readiness. This prevents the host
+        // from starting the match while a client is still building its deterministic layout.
+        const float timeoutSeconds = 180f;
         float waited = 0f;
-        bool hasBoat = FindFirstObjectByType<BoatController>() != null;
-        while (waited < 2f && ((hasBoat && transform.parent == null) || GameSpawner.Instance == null || !GameSpawner.Instance.IsSpawned))
+
+        while (waited < timeoutSeconds)
         {
-            waited += Time.deltaTime;
+            BoatController boat = FindFirstObjectByType<BoatController>();
+            bool boatParentReady = boat == null || transform.parent != null;
+            bool spawnerReady = GameSpawner.Instance != null && GameSpawner.Instance.IsSpawned;
+            bool worldReady = spawnerReady && GameSpawner.Instance.IsLocalWorldReady;
+
+            if (boatParentReady && worldReady)
+            {
+                GameSpawner.Instance.NotifyClientPlayerReadyRpc();
+                yield break;
+            }
+
+            waited += Time.unscaledDeltaTime;
             yield return null;
         }
 
-        if (GameSpawner.Instance != null && GameSpawner.Instance.IsSpawned)
-        {
-            GameSpawner.Instance.NotifyClientPlayerReadyRpc();
-        }
+        Debug.LogError("[PlayerMovement] Gagal melaporkan kesiapan: kapal, GameSpawner, atau world generation belum siap setelah 180 detik.", this);
     }
 
     public override void OnNetworkDespawn()

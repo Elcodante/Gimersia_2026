@@ -66,6 +66,8 @@ GameObject:
   - component: {fileID: 2904352377079462182}
   - component: {fileID: 5195932149331725911}
   - component: {fileID: 8056767579168051067}
+  - component: {fileID: 6687557218464472537}
+  - component: {fileID: 9038607317164595299}
   m_Layer: 0
   m_Name: Batu Hook 3
   m_TagString: Untagged
@@ -82,7 +84,7 @@ Transform:
   m_GameObject: {fileID: 5906578777181309628}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: -0.60876137, w: 0.7933534}
-  m_LocalPosition: {x: -453.52, y: 4.58, z: -354.77}
+  m_LocalPosition: {x: -453.52, y: 6, z: -354.77}
   m_LocalScale: {x: 0.49999997, y: 1.5, z: 0.49999997}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -146,3 +148,36 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!114 &6687557218464472537
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5906578777181309628}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3ef21ded41664dac81d07129674c5930, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HookableTarget
+  canBeHooked: 1
+--- !u!114 &9038607317164595299
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5906578777181309628}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2ea42b78ceaed143bb364a963f53a19, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HookableSweepHighlight
+  highlightColor: {r: 1, g: 0.88, b: 0.48, a: 1}
+  bandWidth: 0.22
+  intensity: 1.8
+  firstSweepDelay: 1
+  minInterval: 3
+  maxInterval: 5
+  sweepDuration: 1.1
+  includeInactiveMeshes: 1

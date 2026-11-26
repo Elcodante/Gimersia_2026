@@ -360,6 +360,14 @@ public class LassoController : NetworkBehaviour
     {
         if (netState.Value != LassoState.Idle) return;
 
+        // Server-side range validation: never trust a client-supplied landing point.
+        if (FlatDistance(transform.position, landingPoint) > lassoRange + 0.25f)
+        {
+            if (serverSequenceCoroutine != null) StopCoroutine(serverSequenceCoroutine);
+            serverSequenceCoroutine = StartCoroutine(RetractRopeRoutine());
+            return;
+        }
+
         if (serverSequenceCoroutine != null) StopCoroutine(serverSequenceCoroutine);
         serverSequenceCoroutine = StartCoroutine(ServerLassoRoutine(landingPoint));
     }
@@ -582,21 +590,22 @@ public class LassoController : NetworkBehaviour
 
         foreach (Collider col in hits)
         {
-            if (col.CompareTag("Batu") || col.CompareTag("Sampah"))
-            {
-                // Sampah yang sudah lepas & hanyut tidak bisa di-hook lagi
-                if (col.CompareTag("Sampah"))
-                {
-                    var trashTarget = col.GetComponentInParent<TrashObstacle>();
-                    if (trashTarget != null && trashTarget.IsCleared) continue;
-                }
+            if (col == null || col.isTrigger) continue;
 
-                float dist = Vector3.Distance(point, col.transform.position);
-                if (dist < closestDist)
-                {
-                    closestDist = dist;
-                    closestTarget = col;
-                }
+            // Generated obstacles must explicitly opt in. A Batu/Sampah tag only means
+            // the object can collide with the boat; it no longer grants hookability.
+            HookableTarget hookableTarget = col.GetComponentInParent<HookableTarget>();
+            if (hookableTarget == null || !hookableTarget.CanBeHooked) continue;
+
+            // Sampah yang sudah lepas & hanyut tidak bisa di-hook lagi.
+            TrashObstacle trashTarget = col.GetComponentInParent<TrashObstacle>();
+            if (trashTarget != null && trashTarget.IsCleared) continue;
+
+            float dist = Vector3.Distance(point, col.ClosestPoint(point));
+            if (dist < closestDist)
+            {
+                closestDist = dist;
+                closestTarget = col;
             }
         }
         return closestTarget;
