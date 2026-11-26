@@ -4,7 +4,7 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class PlayerMovement : NetworkBehaviour
+public class PlayerMovement : NetworkBehaviour, IKnockbackable
 {
     [Header("Pengaturan Gerak")]
     [SerializeField] private float moveSpeed = 5f;
@@ -56,6 +56,11 @@ public class PlayerMovement : NetworkBehaviour
     /// <summary>True jika pemain sedang jatuh ke air atau sedang proses respawn (disinkronkan ke semua client untuk CameraTracker).</summary>
     public bool IsOffBoatOrRespawning => isFallingOff || remoteFallingOff || respawnLocked || netOffBoat.Value || netHidden.Value;
 
+    /// <summary>True jika pemain berada di atas kapal dan dapat dihempaskan oleh serangan ikan.</summary>
+    public bool CanBeKnockedBack => IsSpawned && !serverRespawning && !netHidden.Value && !netOffBoat.Value && transform.parent != null;
+
+    public Vector3 KnockbackPosition => transform.position;
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -96,26 +101,46 @@ public class PlayerMovement : NetworkBehaviour
         // World generation is a prerequisite for player readiness. This prevents the host
         // from starting the match while a client is still building its deterministic layout.
         const float timeoutSeconds = 180f;
+        const float retryIntervalSeconds = 0.5f;
         float waited = 0f;
+        float retryTimer = 0f;
+        bool hasReported = false;
 
-        while (waited < timeoutSeconds)
+        while (waited < timeoutSeconds && IsSpawned && IsOwner)
         {
+            GameSpawner spawner = GameSpawner.Instance;
+            if (spawner != null && spawner.IsSpawned && (spawner.IsMatchStarted.Value || spawner.IsIntroPlaying.Value))
+            {
+                yield break;
+            }
+
             BoatController boat = FindFirstObjectByType<BoatController>();
             bool boatParentReady = boat == null || transform.parent != null;
-            bool spawnerReady = GameSpawner.Instance != null && GameSpawner.Instance.IsSpawned;
-            bool worldReady = spawnerReady && GameSpawner.Instance.IsLocalWorldReady;
+            bool spawnerReady = spawner != null && spawner.IsSpawned;
+            bool worldReady = spawnerReady && spawner.IsLocalWorldReady;
 
             if (boatParentReady && worldReady)
             {
-                GameSpawner.Instance.NotifyClientPlayerReadyRpc();
-                yield break;
+                if (!hasReported || retryTimer >= retryIntervalSeconds)
+                {
+                    spawner.NotifyClientPlayerReadyRpc();
+                    hasReported = true;
+                    retryTimer = 0f;
+                }
+                else
+                {
+                    retryTimer += Time.unscaledDeltaTime;
+                }
             }
 
             waited += Time.unscaledDeltaTime;
             yield return null;
         }
 
-        Debug.LogError("[PlayerMovement] Gagal melaporkan kesiapan: kapal, GameSpawner, atau world generation belum siap setelah 180 detik.", this);
+        if (!hasReported && IsSpawned && IsOwner)
+        {
+            Debug.LogError("[PlayerMovement] Gagal melaporkan kesiapan: kapal, GameSpawner, atau world generation belum siap setelah 180 detik.", this);
+        }
     }
 
     public override void OnNetworkDespawn()
@@ -273,10 +298,61 @@ public class PlayerMovement : NetworkBehaviour
     [ServerRpc]
     private void FallOffBoatServerRpc()
     {
-        if (serverRespawning) return;
+        if (serverRespawning || netOffBoat.Value) return;
         netOffBoat.Value = true;
         NetworkObject.TryRemoveParent(true);
         EnableGravityClientRpc();
+    }
+
+    /// <summary>
+    /// Dipanggil di Server oleh sistem ikan (IKnockbackable) untuk menghempaskan pemain dari kapal ke air.
+    /// Melepas laso jika sedang menancap agar kapal tidak tersangkut tali pemain yang terlempar.
+    /// </summary>
+    public void ApplyFishKnockback(Vector3 knockbackVelocity)
+    {
+        if (!IsServer || !CanBeKnockedBack) return;
+
+        LassoController lasso = GetComponent<LassoController>();
+        if (lasso != null) lasso.ServerForceRelease();
+
+        netOffBoat.Value = true;
+        NetworkObject.TryRemoveParent(true);
+        ApplyFishKnockbackClientRpc(knockbackVelocity);
+    }
+
+    [ClientRpc]
+    private void ApplyFishKnockbackClientRpc(Vector3 knockbackVelocity)
+    {
+        remoteFallingOff = true;
+        AudioManager.Instance?.PlaySFX("player_splash", 0.08f);
+
+        rb.isKinematic = !IsOwner;
+        rb.interpolation = IsOwner ? RigidbodyInterpolation.Interpolate : RigidbodyInterpolation.None;
+
+        if (!IsOwner) return;
+
+        isFallingOff = true;
+        fallTimer = 0f;
+        sinkTimer = 0f;
+
+        rb.useGravity = true;
+        rb.constraints &= ~RigidbodyConstraints.FreezePositionY;
+        IgnoreCollisionWithRiver();
+
+        Vector3 inherited = Vector3.zero;
+        BoatController boat = FindFirstObjectByType<BoatController>();
+        if (boat != null)
+        {
+            IgnoreCollisionWithBoat(boat);
+            Rigidbody boatRb = boat.GetComponent<Rigidbody>();
+            if (boatRb != null)
+            {
+                inherited = boatRb.linearVelocity;
+                inherited.y = 0f;
+            }
+        }
+
+        rb.linearVelocity = inherited + knockbackVelocity;
     }
 
     [ClientRpc]

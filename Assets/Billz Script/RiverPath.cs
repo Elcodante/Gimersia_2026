@@ -68,8 +68,14 @@ public class RiverPath : MonoBehaviour
 
     void ApplyToMaterial()
     {
+        float speed = flowSpeed / uvTileLength;
         if (waterMaterial && waterMaterial.HasProperty("_FlowSpeed"))
-            waterMaterial.SetFloat("_FlowSpeed", flowSpeed / uvTileLength);
+            waterMaterial.SetFloat("_FlowSpeed", speed);
+
+        MeshRenderer mr = GetComponent<MeshRenderer>();
+        Material rendererMat = mr != null ? mr.sharedMaterial : null;
+        if (rendererMat != null && rendererMat != waterMaterial && rendererMat.HasProperty("_FlowSpeed"))
+            rendererMat.SetFloat("_FlowSpeed", speed);
     }
 
     public struct Sample
