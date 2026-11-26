@@ -30058,14 +30058,20 @@ MonoBehaviour:
   fillImage: {fileID: 0}
   boatMarker: {fileID: 0}
   statusText: {fileID: 0}
-  fontAsset: {fileID: 11400000, guid: cf7aeda206acd4941b65c72c22cb4c17, type: 2}
+  borderSprite: {fileID: 21300000, guid: 41a0eae0c97b0214c854d99450747f11, type: 3}
+  trackAndFillSprite: {fileID: 21300000, guid: 9ac4945e90a9d2842a3b80e3d82149e0, type: 3}
+  boatMarkerSprite: {fileID: 21300000, guid: 84cf16d9385501b4ea933f36eb614d06, type: 3}
+  goalIconSprite: {fileID: 21300000, guid: 4aef96e661d262445aff2c3400c423b9, type: 3}
   barWidth: 520
+  barHeight: 26
   topMargin: 20
-  frameColor: {r: 0.11, g: 0.14, b: 0.18, a: 0.84}
-  trackColor: {r: 0.2, g: 0.25, b: 0.3, a: 0.92}
+  boatMarkerSize: {x: 68, y: 44}
+  goalIconSize: {x: 46, y: 46}
+  fontAsset: {fileID: 11400000, guid: cf7aeda206acd4941b65c72c22cb4c17, type: 2}
+  showStatusText: 1
+  trackTint: {r: 1, g: 1, b: 1, a: 1}
   fillStartColor: {r: 0.2, g: 0.72, b: 0.85, a: 1}
   fillGoalColor: {r: 0.95, g: 0.76, b: 0.22, a: 1}
-  markerColor: {r: 1, g: 0.94, b: 0.72, a: 1}
   fillSmoothSpeed: 7
 --- !u!1001 &1263604553
 PrefabInstance:
