@@ -3,29 +3,50 @@ using Unity.Netcode;
 using UnityEngine;
 
 /// <summary>
-/// Koordinator event serangan ikan (Multiplayer Server-Authoritative & WebGL-friendly).
-/// - Memanfaatkan FishObjectPool untuk mendaur ulang objek ikan tanpa Instantiate/Destroy.
-/// - Memanfaatkan FishAttackScheduler untuk pola kemunculan acak dan dinamis (independen dari jarak tujuan).
+/// Koordinator event serangan ikan (Multiplayer Server-Authoritative &amp; WebGL-friendly).
+/// - Memanfaatkan FishObjectPool untuk mendaur ulang multi-varian objek ikan (Ikan 1 &amp; Ikan 2) tanpa Instantiate/Destroy.
+/// - Memanfaatkan FishAttackScheduler dengan profil berbeda untuk mode Solo (lebih jarang) vs Multiplayer.
 /// - Server memilih target pemain secara acak, menyinkronkan lintasan via 1 ClientRpc ringan,
-///   memverifikasi benturan di server, lalu memicu knockback pemain & efek terpental pada ikan.
+///   memverifikasi benturan di server, lalu memicu knockback pemain &amp; efek terpental pada ikan.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class FishEventController : NetworkBehaviour
 {
     [Header("Prefab & Object Pool")]
-    [Tooltip("Prefab ikan (Assets/Prefabs/ikan.prefab). Kosong = buat kotak fallback otomatis.")]
+    [Tooltip("Daftar prefab model ikan yang di-prewarm bergantian di pool (isi Ikan 1 & Ikan 2).")]
+    [SerializeField] private GameObject[] fishVariantPrefabs;
+    [Tooltip("Prefab cadangan jika daftar varian di atas kosong (Assets/Prefabs/ikan.prefab).")]
     [SerializeField] private FishProjectile fishPrefab;
+    [Tooltip("Skala visual untuk prefab model 3D murni (Ikan 1 / Ikan 2 berukuran ~1 m di FBX).")]
+    [SerializeField, Range(0.5f, 4f)] private float fishVisualScale = 1.8f;
     [Tooltip("Jumlah maksimal ikan yang di-prewarm dalam pool (disarankan 6-8 untuk WebGL).")]
     [SerializeField, Range(2, 16)] private int poolCapacity = 8;
 
-    [Header("Pola Kemunculan Acak & Dinamis")]
-    [Tooltip("Jeda awal setelah match dimulai sebelum ikan pertama berpeluang muncul (detik).")]
-    [SerializeField, Min(0.5f)] private float initialGraceSeconds = 4.0f;
-    [SerializeField, Min(1.5f)] private float minWaveInterval = 4.5f;
-    [SerializeField, Min(2.0f)] private float maxWaveInterval = 10.5f;
-    [SerializeField, Min(0.3f)] private float minBurstSpacing = 0.7f;
-    [SerializeField, Min(0.5f)] private float maxBurstSpacing = 1.4f;
-    [SerializeField, Range(1, 4)] private int maxBurstCount = 3;
+    [Header("Pola Kemunculan: Mode Solo (Lebih Jarang)")]
+    [SerializeField] private FishPacingProfile soloPacing = new FishPacingProfile
+    {
+        initialGraceSeconds = 12f,
+        minWaveInterval = 15f,
+        maxWaveInterval = 26f,
+        minBurstSpacing = 1.4f,
+        maxBurstSpacing = 2.4f,
+        maxBurstCount = 1,
+        minMultiBurstChance = 0f,
+        maxMultiBurstChance = 0f
+    };
+
+    [Header("Pola Kemunculan: Mode Multiplayer")]
+    [SerializeField] private FishPacingProfile multiplayerPacing = new FishPacingProfile
+    {
+        initialGraceSeconds = 8f,
+        minWaveInterval = 10f,
+        maxWaveInterval = 18f,
+        minBurstSpacing = 1.1f,
+        maxBurstSpacing = 2.0f,
+        maxBurstCount = 2,
+        minMultiBurstChance = 0.16f,
+        maxMultiBurstChance = 0.32f
+    };
 
     [Header("Lintasan Lompatan Ikan")]
     [SerializeField, Range(4f, 16f)] private float minSpawnRadius = 7.5f;
@@ -54,6 +75,7 @@ public sealed class FishEventController : NetworkBehaviour
     private FishObjectPool pool;
     private FishAttackScheduler scheduler;
     private Transform poolContainer;
+    private bool pacingAppliedForMatch;
 
     private RiverPath cachedRiver;
     private BoatController cachedBoat;
@@ -71,21 +93,16 @@ public sealed class FishEventController : NetworkBehaviour
         containerObj.transform.SetParent(transform, false);
         poolContainer = containerObj.transform;
 
-        pool = new FishObjectPool(fishPrefab, poolCapacity, poolContainer);
-        scheduler = new FishAttackScheduler(
-            initialGraceSeconds,
-            minWaveInterval,
-            maxWaveInterval,
-            minBurstSpacing,
-            maxBurstSpacing,
-            maxBurstCount);
+        pool = new FishObjectPool(fishVariantPrefabs, fishPrefab, fishVisualScale, poolCapacity, poolContainer);
+        scheduler = new FishAttackScheduler(SanitizeProfile(multiplayerPacing, FishPacingProfile.DefaultMultiplayer));
     }
 
     public override void OnNetworkSpawn()
     {
+        pacingAppliedForMatch = false;
+
         if (IsServer)
         {
-            scheduler.Reset();
             RefreshSceneReferences();
             RefreshPlayerCache();
         }
@@ -93,6 +110,7 @@ public sealed class FishEventController : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
+        pacingAppliedForMatch = false;
         pool?.ReleaseAll();
     }
 
@@ -100,6 +118,11 @@ public sealed class FishEventController : NetworkBehaviour
     {
         if (!IsServer || !IsSpawned) return;
         if (!GameSpawner.IsMatchReady || RiverFinishGoal.HasFinished) return;
+
+        if (!pacingAppliedForMatch)
+        {
+            ApplySessionPacingProfile();
+        }
 
         float dt = Time.deltaTime;
         if (dt <= 0f) return;
@@ -127,6 +150,36 @@ public sealed class FishEventController : NetworkBehaviour
         {
             CheckServerHitCollisions();
         }
+    }
+
+    private void ApplySessionPacingProfile()
+    {
+        pacingAppliedForMatch = true;
+        bool solo = IsSoloSession();
+
+        FishPacingProfile activeProfile = solo
+            ? SanitizeProfile(soloPacing, FishPacingProfile.DefaultSolo)
+            : SanitizeProfile(multiplayerPacing, FishPacingProfile.DefaultMultiplayer);
+
+        scheduler.ApplyProfile(activeProfile);
+        Debug.Log($"[FishEventController] Profil ikan aktif: {(solo ? "SOLO" : "MULTIPLAYER")} " +
+                  $"(grace={activeProfile.initialGraceSeconds:F0}s, interval={activeProfile.minWaveInterval:F0}-{activeProfile.maxWaveInterval:F0}s, maxBurst={activeProfile.maxBurstCount}).");
+    }
+
+    private bool IsSoloSession()
+    {
+        if (MainMenuController.IsSoloMode) return true;
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.ConnectedClientsIds.Count <= 1) return true;
+        return false;
+    }
+
+    private static FishPacingProfile SanitizeProfile(FishPacingProfile configured, FishPacingProfile fallback)
+    {
+        if (configured.minWaveInterval < 1f || configured.maxWaveInterval < 1f || configured.maxBurstCount < 1)
+        {
+            return fallback;
+        }
+        return configured;
     }
 
     private void RefreshSceneReferences()

@@ -13,56 +13,55 @@ MonoBehaviour:
   m_Name: DefaultPlayerCharacters
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCharacterCatalog
   variants:
-  - characterName: Petualang Biru
-    modelPrefab: {fileID: 0}
-    modelLocalPosition: {x: 0, y: 0, z: 0}
+  - characterName: Player Cowok
+    modelPrefab: {fileID: 5899755315447504280, guid: 783f7d2c4bcb0384eaeadc5a4ce6a9e6, type: 3}
+    modelLocalPosition: {x: 0, y: -1, z: 0}
     modelLocalEuler: {x: 0, y: 0, z: 0}
     modelLocalScale: {x: 1, y: 1, z: 1}
-    bodyChildName: 
-    headChildName: 
+    bodyChildName: Tubuh Cowok
+    headChildName: Kepala Cowok
     bodyMeshOverride: {fileID: 0}
     headMeshOverride: {fileID: 0}
     bodyMaterialOverride: {fileID: 0}
     headMaterialOverride: {fileID: 0}
-    useFallbackTint: 1
-    fallbackTintColor: {r: 0.24, g: 0.58, b: 0.92, a: 1}
-  - characterName: Petualang Merah
-    modelPrefab: {fileID: 0}
-    modelLocalPosition: {x: 0, y: 0, z: 0}
+    useFallbackTint: 0
+    fallbackTintColor: {r: 1, g: 1, b: 1, a: 1}
+  - characterName: Player Cewek
+    modelPrefab: {fileID: 1435860904792944205, guid: ef02bd7b317d37a47a16aa5251137a6e, type: 3}
+    modelLocalPosition: {x: 0, y: -1, z: 0}
     modelLocalEuler: {x: 0, y: 0, z: 0}
     modelLocalScale: {x: 1, y: 1, z: 1}
-    bodyChildName: 
-    headChildName: 
+    bodyChildName: Tubuh Cewek
+    headChildName: Kepala Cewek
     bodyMeshOverride: {fileID: 0}
     headMeshOverride: {fileID: 0}
     bodyMaterialOverride: {fileID: 0}
     headMaterialOverride: {fileID: 0}
-    useFallbackTint: 1
-    fallbackTintColor: {r: 0.92, g: 0.32, b: 0.28, a: 1}
-  - characterName: Petualang Hijau
-    modelPrefab: {fileID: 0}
-    modelLocalPosition: {x: 0, y: 0, z: 0}
+    useFallbackTint: 0
+    fallbackTintColor: {r: 1, g: 1, b: 1, a: 1}
+  - characterName: Player Cowok Tua
+    modelPrefab: {fileID: 8447401717483418126, guid: 76e6629c5e58a2e4db34298cf2e5f2af, type: 3}
+    modelLocalPosition: {x: 0, y: -1, z: 0}
     modelLocalEuler: {x: 0, y: 0, z: 0}
     modelLocalScale: {x: 1, y: 1, z: 1}
-    bodyChildName: 
-    headChildName: 
+    bodyChildName: Tubuh Cowok Tua
+    headChildName: Kepala Cowok Tua
     bodyMeshOverride: {fileID: 0}
     headMeshOverride: {fileID: 0}
     bodyMaterialOverride: {fileID: 0}
     headMaterialOverride: {fileID: 0}
-    useFallbackTint: 1
-    fallbackTintColor: {r: 0.26, g: 0.78, b: 0.44, a: 1}
-  - characterName: Petualang Emas
-    modelPrefab: {fileID: 0}
-    modelLocalPosition: {x: 0, y: 0, z: 0}
+    useFallbackTint: 0
+    fallbackTintColor: {r: 1, g: 1, b: 1, a: 1}
+  - characterName: Player Cewek Tua
+    modelPrefab: {fileID: 4575317853298365421, guid: f6a3f8d5a8f20df4d8974f8969bc7f7e, type: 3}
+    modelLocalPosition: {x: 0, y: -1, z: 0}
     modelLocalEuler: {x: 0, y: 0, z: 0}
     modelLocalScale: {x: 1, y: 1, z: 1}
-    bodyChildName: 
-    headChildName: 
+    bodyChildName: Tubuh Cewek Tua
+    headChildName: Kepala Cewek Tua
     bodyMeshOverride: {fileID: 0}
     headMeshOverride: {fileID: 0}
     bodyMaterialOverride: {fileID: 0}
     headMaterialOverride: {fileID: 0}
-    useFallbackTint: 1
-    fallbackTintColor: {r: 0.95, g: 0.74, b: 0.2, a: 1}
-
+    useFallbackTint: 0
+    fallbackTintColor: {r: 1, g: 1, b: 1, a: 1}

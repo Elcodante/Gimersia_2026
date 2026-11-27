@@ -46,6 +46,8 @@ public sealed class FishProjectile : MonoBehaviour
     private Vector3 deflectVelocity;
     private Vector3 deflectSpinAxis;
     private bool hasPlayedSubmergeSplash;
+    private Quaternion visualBaseLocalRotation = Quaternion.identity;
+    private bool baseRotationCached;
 
     private void Awake()
     {
@@ -53,6 +55,21 @@ public sealed class FishProjectile : MonoBehaviour
         {
             visualRoot = transform.GetChild(0);
         }
+        CacheVisualBaseRotation();
+    }
+
+    public void ConfigureVisualRoot(Transform visual)
+    {
+        visualRoot = visual;
+        baseRotationCached = false;
+        CacheVisualBaseRotation();
+    }
+
+    private void CacheVisualBaseRotation()
+    {
+        if (baseRotationCached || visualRoot == null) return;
+        visualBaseLocalRotation = visualRoot.localRotation;
+        baseRotationCached = true;
     }
 
     public void ConfigureSlot(int slotIndex)
@@ -70,9 +87,10 @@ public sealed class FishProjectile : MonoBehaviour
         stateElapsed = 0f;
         hasPlayedSubmergeSplash = false;
 
+        CacheVisualBaseRotation();
         if (visualRoot != null)
         {
-            visualRoot.localRotation = Quaternion.identity;
+            visualRoot.localRotation = visualBaseLocalRotation;
         }
 
         transform.position = trajectory.StartPos;
@@ -117,7 +135,7 @@ public sealed class FishProjectile : MonoBehaviour
     {
         State = FishState.Inactive;
         onCompleted = null;
-        if (visualRoot != null) visualRoot.localRotation = Quaternion.identity;
+        if (visualRoot != null) visualRoot.localRotation = visualBaseLocalRotation;
         if (gameObject.activeSelf) gameObject.SetActive(false);
     }
 
@@ -186,7 +204,7 @@ public sealed class FishProjectile : MonoBehaviour
         if (visualRoot != null && wiggleAngle > 0.01f)
         {
             float yawWiggle = Mathf.Sin(stateElapsed * wiggleFrequency * Mathf.PI * 2f) * wiggleAngle;
-            visualRoot.localRotation = Quaternion.Euler(0f, yawWiggle, 0f);
+            visualRoot.localRotation = Quaternion.Euler(0f, yawWiggle, 0f) * visualBaseLocalRotation;
         }
 
         // Bunyi cipratan saat ikan menukik kembali menyentuh permukaan air
@@ -227,7 +245,7 @@ public sealed class FishProjectile : MonoBehaviour
     private void CompleteAndReturnToPool()
     {
         State = FishState.Inactive;
-        if (visualRoot != null) visualRoot.localRotation = Quaternion.identity;
+        if (visualRoot != null) visualRoot.localRotation = visualBaseLocalRotation;
         gameObject.SetActive(false);
 
         Action<FishProjectile> callback = onCompleted;

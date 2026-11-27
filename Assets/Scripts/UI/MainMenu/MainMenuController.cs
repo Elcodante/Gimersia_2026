@@ -69,6 +69,7 @@ public class MainMenuController : MonoBehaviour
     private async void Start()
     {
         IsSoloMode = false;
+        NetworkPlayerData.ConnectedPlayers.Clear();
         RiverWorldSeedContext.ClearRoomCode();
 
         if (panelTransitioner != null)

@@ -36,7 +36,7 @@ public class InGameMenuUI : MonoBehaviour
 
     private void Update()
     {
-        if (!Application.isFocused || Keyboard.current == null) return;
+        if (!InputFocusGuard.CanAcceptInput || Keyboard.current == null) return;
 
         bool escPressed = Keyboard.current.escapeKey.wasPressedThisFrame;
         bool tabPressed = Keyboard.current.tabKey.wasPressedThisFrame;

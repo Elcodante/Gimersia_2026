@@ -32,6 +32,7 @@ public class PlayerCharacterAppearance : NetworkBehaviour
 
     public int ActiveCharacterIndex => appliedIndex;
     public string ActiveCharacterName { get; private set; } = string.Empty;
+    public int CatalogVariantCount => catalog != null ? catalog.Count : 0;
 
     private PlayerSwayAnimator swayAnimator;
     private PlayerMovement playerMovement;

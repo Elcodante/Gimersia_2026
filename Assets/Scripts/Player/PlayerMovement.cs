@@ -196,7 +196,7 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
         if (!GameSpawner.IsMatchReady) return;
 
         // Cegah input jalan WASD saat membidik/menarik laso, respawn, menu terbuka, atau sedang jatuh dari kapal
-        if (Application.isFocused && !isMovementLocked && !respawnLocked && !isFallingOff && !InGameMenuUI.ShouldLockMovement)
+        if (InputFocusGuard.CanAcceptInput && !isMovementLocked && !respawnLocked && !isFallingOff && !InGameMenuUI.ShouldLockMovement)
         {
             HandleMovement();
         }
