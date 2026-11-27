@@ -492,13 +492,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LassoController
   ShowTopMostFoldoutHeaderGroup: 1
-  lassoRange: 15
+  lassoRange: 25
   aimFollowSpeed: 8
   catchRadius: 1.5
   trashTugInterval: 0.55
   slackKey: 21
   slackExtendSpeed: 4
-  maxRopeLength: 28
+  maxRopeLength: 32
   ropeReelSpeed: 5
   ropeReelEase: 1.5
   ropeReelMinSpeed: 0.8
@@ -636,7 +636,7 @@ MonoBehaviour:
   heightOffset: 2
   fontSize: 8
   localPlayerColor: {r: 1, g: 1, b: 1, a: 1}
-  otherPlayerColor: {r: 0.2905661, g: 0.2905661, b: 0.2905661, a: 1}
+  otherPlayerColor: {r: 0.8037735, g: 0.8037735, b: 0.8037735, a: 1}
   outlineColor: {r: 0.1, g: 0.08, b: 0.06, a: 1}
   outlineWidth: 0.24
   fontAsset: {fileID: 11400000, guid: cf7aeda206acd4941b65c72c22cb4c17, type: 2}
