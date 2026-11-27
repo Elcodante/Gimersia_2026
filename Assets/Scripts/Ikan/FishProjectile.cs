@@ -33,6 +33,14 @@ public sealed class FishProjectile : MonoBehaviour
     [Header("Audio (ID di AudioManager)")]
     [SerializeField] private string splashSfxId = "player_splash";
 
+    [Header("Partikel Air")]
+    [Tooltip("Skala cipratan saat ikan menembus permukaan air untuk melompat.")]
+    [SerializeField, Min(0.1f)] private float leapSplashScale = 1.2f;
+    [Tooltip("Skala cipratan saat ikan nyemplung kembali ke air.")]
+    [SerializeField, Min(0.1f)] private float entrySplashScale = 1.2f;
+    [Tooltip("Skala riak di permukaan air sebelum ikan melompat.")]
+    [SerializeField, Min(0.1f)] private float rippleScale = 1f;
+
     public int SlotIndex { get; private set; } = -1;
     public FishState State { get; private set; } = FishState.Inactive;
     public bool IsLeaping => State == FishState.Leaping;
@@ -48,6 +56,13 @@ public sealed class FishProjectile : MonoBehaviour
     private bool hasPlayedSubmergeSplash;
     private Quaternion visualBaseLocalRotation = Quaternion.identity;
     private bool baseRotationCached;
+
+    // Partikel air
+    private float waterSurfaceY;
+    private float prevY;
+    private bool hasPlayedExitVfx;
+    private bool hasPlayedEntryVfx;
+    private bool hasPlayedMidRipple;
 
     private void Awake()
     {
@@ -94,6 +109,11 @@ public sealed class FishProjectile : MonoBehaviour
         }
 
         transform.position = trajectory.StartPos;
+        waterSurfaceY = ResolveWaterSurfaceY(trajectory.StartPos);
+        prevY = trajectory.StartPos.y;
+        hasPlayedExitVfx = false;
+        hasPlayedEntryVfx = false;
+        hasPlayedMidRipple = false;
         Vector3 initialTangent = trajectory.EvaluateTangent(0f);
         if (initialTangent.sqrMagnitude > 0.0001f)
         {
@@ -105,6 +125,7 @@ public sealed class FishProjectile : MonoBehaviour
         if (trajectory.TelegraphDuration > 0.01f)
         {
             State = FishState.Telegraphing;
+            PlayRippleVfx(trajectory.StartPos);
         }
         else
         {
@@ -121,6 +142,8 @@ public sealed class FishProjectile : MonoBehaviour
 
         transform.position = hitPosition;
         deflectVelocity = bounceVelocity;
+        prevY = hitPosition.y;
+        hasPlayedEntryVfx = false;
         deflectSpinAxis = Vector3.Cross(Vector3.up, bounceVelocity);
         if (deflectSpinAxis.sqrMagnitude < 0.001f) deflectSpinAxis = Vector3.right;
         else deflectSpinAxis.Normalize();
@@ -174,6 +197,13 @@ public sealed class FishProjectile : MonoBehaviour
         Vector3 side = Vector3.Cross(Vector3.up, trajectory.HorizontalDir);
         transform.position = pos + side * shake;
 
+        // Riak kedua di permukaan air tepat sebelum ikan melesat keluar
+        if (!hasPlayedMidRipple && progress >= 0.6f)
+        {
+            hasPlayedMidRipple = true;
+            PlayRippleVfx(trajectory.StartPos);
+        }
+
         if (stateElapsed >= trajectory.TelegraphDuration)
         {
             EnterLeapingState();
@@ -183,6 +213,7 @@ public sealed class FishProjectile : MonoBehaviour
     private void EnterLeapingState()
     {
         State = FishState.Leaping;
+        prevY = transform.position.y;
         stateElapsed = 0f;
         PlaySplashSfx(0.12f);
     }
@@ -196,6 +227,7 @@ public sealed class FishProjectile : MonoBehaviour
         Vector3 tangent = trajectory.EvaluateTangent(t);
 
         transform.position = pos;
+        UpdateLeapWaterVfx(pos);
         if (tangent.sqrMagnitude > 0.0001f)
         {
             transform.rotation = Quaternion.LookRotation(tangent, Vector3.up);
@@ -229,6 +261,14 @@ public sealed class FishProjectile : MonoBehaviour
         transform.position = pos;
         transform.Rotate(deflectSpinAxis, deflectSpinSpeed * dt, Space.World);
 
+        // Ikan terpental jatuh menembus permukaan air -> cipratan masuk air
+        if (!hasPlayedEntryVfx && deflectVelocity.y < 0f && prevY > waterSurfaceY && pos.y <= waterSurfaceY)
+        {
+            hasPlayedEntryVfx = true;
+            PlayEntryVfx(pos);
+        }
+        prevY = pos.y;
+
         if (!hasPlayedSubmergeSplash && deflectVelocity.y < 0f && pos.y <= trajectory.SubmergeY + 1.2f)
         {
             hasPlayedSubmergeSplash = true;
@@ -251,6 +291,61 @@ public sealed class FishProjectile : MonoBehaviour
         Action<FishProjectile> callback = onCompleted;
         onCompleted = null;
         callback?.Invoke(this);
+    }
+
+    // ------------------------------------------------------------------ PARTIKEL AIR
+
+    private void UpdateLeapWaterVfx(Vector3 pos)
+    {
+        if (!hasPlayedExitVfx)
+        {
+            // Naik menembus permukaan air -> cipratan besar ke atas
+            if (pos.y >= waterSurfaceY)
+            {
+                hasPlayedExitVfx = true;
+                PlayLeapVfx(pos);
+            }
+        }
+        else if (!hasPlayedEntryVfx && prevY > waterSurfaceY && pos.y <= waterSurfaceY)
+        {
+            // Menukik kembali menembus permukaan air -> cipratan masuk air
+            hasPlayedEntryVfx = true;
+            PlayEntryVfx(pos);
+        }
+
+        prevY = pos.y;
+    }
+
+    private float ResolveWaterSurfaceY(Vector3 samplePos)
+    {
+        RiverPath river = RiverPath.Main;
+        if (river != null && river.IsValid)
+        {
+            return river.SampleAt(samplePos).center.y;
+        }
+
+        // Cadangan: FishTrajectory.BuildThroughTarget memasang SubmergeY = waterY - max(0.8, submergeDepth)
+        return trajectory.SubmergeY + 1.6f;
+    }
+
+    private Vector3 SurfacePoint(Vector3 pos)
+    {
+        return new Vector3(pos.x, waterSurfaceY + 0.03f, pos.z);
+    }
+
+    private void PlayRippleVfx(Vector3 pos)
+    {
+        WaterSplashVFX.PlayRipple(SurfacePoint(pos), rippleScale);
+    }
+
+    private void PlayLeapVfx(Vector3 pos)
+    {
+        WaterSplashVFX.PlayLeapSplash(SurfacePoint(pos), leapSplashScale);
+    }
+
+    private void PlayEntryVfx(Vector3 pos)
+    {
+        WaterSplashVFX.PlayEntrySplash(SurfacePoint(pos), entrySplashScale);
     }
 
     private void PlaySplashSfx(float pitchRange)

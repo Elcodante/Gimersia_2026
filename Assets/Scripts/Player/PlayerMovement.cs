@@ -28,6 +28,10 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
     [Tooltip("Bagian yang di-skala saat muncul. Kosong = Body & Head dari PlayerSwayAnimator. Jika tetap kosong, memakai efek berkedip.")]
     [SerializeField] private Transform[] appearTargets;
 
+    [Header("Partikel Air")]
+    [Tooltip("Skala cipratan saat pemain nyemplung ke air.")]
+    [SerializeField, Min(0.1f)] private float splashEffectScale = 1.6f;
+
     private Rigidbody rb;
     private bool isFallingOff = false;
     private bool remoteFallingOff = false;
@@ -36,6 +40,11 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
     private bool serverRespawning = false;
     private float fallTimer;
     private float sinkTimer;
+
+    // Partikel air saat nyemplung (dijalankan di semua client)
+    private bool hasPlayedWaterEntryVfx = true; // true = tidak sedang memantau
+    private bool waterEntrySawAbove;
+    private float waterEntryWatchTimer;
 
     private RiverPath river;
     private bool riverSearched;
@@ -190,6 +199,9 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
 
     private void Update()
     {
+        // Efek cipratan jalan di semua client (pemilik maupun salinan remote)
+        if (IsSpawned && !hasPlayedWaterEntryVfx) UpdateWaterEntryVfx();
+
         if (!IsSpawned || !IsOwner) return;
 
         // Tahan seluruh pergerakan pemain sampai seluruh anggota tim selesai spawn
@@ -323,6 +335,7 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
     [ClientRpc]
     private void ApplyFishKnockbackClientRpc(Vector3 knockbackVelocity)
     {
+        BeginWaterEntryWatch();
         remoteFallingOff = true;
         AudioManager.Instance?.PlaySFX("player_splash", 0.08f);
 
@@ -358,6 +371,7 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
     [ClientRpc]
     private void EnableGravityClientRpc()
     {
+        BeginWaterEntryWatch();
         remoteFallingOff = true;
         AudioManager.Instance?.PlaySFX("player_splash", 0.08f);
 
@@ -390,6 +404,48 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
         away = away.sqrMagnitude > 0.01f ? away.normalized : Vector3.zero;
 
         rb.linearVelocity = inherited + away * 1.5f;
+    }
+
+    // ------------------------------------------------------------------ PARTIKEL AIR
+
+    private void BeginWaterEntryWatch()
+    {
+        hasPlayedWaterEntryVfx = false;
+        waterEntrySawAbove = false;
+        waterEntryWatchTimer = 0f;
+    }
+
+    private void UpdateWaterEntryVfx()
+    {
+        waterEntryWatchTimer += Time.deltaTime;
+        if (waterEntryWatchTimer > 8f)
+        {
+            hasPlayedWaterEntryVfx = true; // pengaman: berhenti memantau
+            return;
+        }
+
+        if (river == null && !riverSearched)
+        {
+            riverSearched = true;
+            river = RiverPath.Main;
+        }
+        if (river == null || !river.IsValid) return;
+
+        Vector3 pos = transform.position;
+        float waterY = river.SampleAt(pos).center.y;
+
+        if (pos.y > waterY)
+        {
+            waterEntrySawAbove = true;
+            return;
+        }
+
+        // Pemain baru dianggap nyemplung setelah terlihat di atas air lalu menembus permukaan
+        // (cadangan: bila tak pernah terlihat di atas air, mainkan setelah jeda singkat).
+        if (!waterEntrySawAbove && waterEntryWatchTimer < 0.35f) return;
+
+        hasPlayedWaterEntryVfx = true;
+        WaterSplashVFX.PlayEntrySplash(new Vector3(pos.x, waterY + 0.03f, pos.z), splashEffectScale);
     }
 
     // ------------------------------------------------------------------ TENGGELAM
@@ -624,6 +680,7 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
 
     private void OnHiddenChanged(bool previous, bool hidden)
     {
+        hasPlayedWaterEntryVfx = true; // berhenti memantau cipratan (fase respawn)
         if (appearCoroutine != null)
         {
             StopCoroutine(appearCoroutine);
