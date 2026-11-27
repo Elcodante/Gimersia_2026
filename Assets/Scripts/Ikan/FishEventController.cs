@@ -95,6 +95,7 @@ public sealed class FishEventController : NetworkBehaviour
 
         pool = new FishObjectPool(fishVariantPrefabs, fishPrefab, fishVisualScale, poolCapacity, poolContainer);
         scheduler = new FishAttackScheduler(SanitizeProfile(multiplayerPacing, FishPacingProfile.DefaultMultiplayer));
+        WaterSplashVFX.Prewarm();
     }
 
     public override void OnNetworkSpawn()

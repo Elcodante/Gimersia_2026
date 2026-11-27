@@ -31,6 +31,8 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
     [Header("Partikel Air")]
     [Tooltip("Skala cipratan saat pemain nyemplung ke air.")]
     [SerializeField, Min(0.1f)] private float splashEffectScale = 1.6f;
+    [Tooltip("Tinggi di atas permukaan air untuk memicu cipratan saat kaki/tubuh pemain menyentuh air.")]
+    [SerializeField, Range(0f, 0.8f)] private float waterEntryTriggerOffset = 0.25f;
 
     private Rigidbody rb;
     private bool isFallingOff = false;
@@ -424,28 +426,48 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
             return;
         }
 
-        if (river == null && !riverSearched)
-        {
-            riverSearched = true;
-            river = RiverPath.Main;
-        }
-        if (river == null || !river.IsValid) return;
+        if (!TryGetWaterSurfaceY(transform.position, out float waterY)) return;
 
         Vector3 pos = transform.position;
-        float waterY = river.SampleAt(pos).center.y;
+        float triggerY = waterY + waterEntryTriggerOffset;
 
-        if (pos.y > waterY)
+        if (pos.y > triggerY)
         {
             waterEntrySawAbove = true;
             return;
         }
 
         // Pemain baru dianggap nyemplung setelah terlihat di atas air lalu menembus permukaan
-        // (cadangan: bila tak pernah terlihat di atas air, mainkan setelah jeda singkat).
-        if (!waterEntrySawAbove && waterEntryWatchTimer < 0.35f) return;
+        // (cadangan: bila sudah di bawah waterY atau tak pernah terlihat di atas triggerY setelah jeda singkat, tetap mainkan).
+        if (!waterEntrySawAbove && pos.y > waterY && waterEntryWatchTimer < 0.35f) return;
 
         hasPlayedWaterEntryVfx = true;
         WaterSplashVFX.PlayEntrySplash(new Vector3(pos.x, waterY + 0.03f, pos.z), splashEffectScale);
+    }
+
+    private bool TryGetWaterSurfaceY(Vector3 worldPos, out float waterY)
+    {
+        if (river == null && !riverSearched)
+        {
+            riverSearched = true;
+            river = RiverPath.Main;
+        }
+
+        if (river != null && river.IsValid)
+        {
+            waterY = river.SampleAt(worldPos).center.y;
+            return float.IsFinite(waterY);
+        }
+
+        BoatController boat = FindFirstObjectByType<BoatController>();
+        if (boat != null)
+        {
+            waterY = boat.transform.position.y - 0.5f;
+            return true;
+        }
+
+        waterY = 0f;
+        return false;
     }
 
     // ------------------------------------------------------------------ TENGGELAM

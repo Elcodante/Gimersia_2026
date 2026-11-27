@@ -58,7 +58,10 @@ public sealed class FishProjectile : MonoBehaviour
     private bool baseRotationCached;
 
     // Partikel air
-    private float waterSurfaceY;
+    private float exitWaterY;
+    private float entryWaterY;
+    private float deflectWaterY;
+    private bool deflectWaterSampled;
     private float prevY;
     private bool hasPlayedExitVfx;
     private bool hasPlayedEntryVfx;
@@ -109,11 +112,15 @@ public sealed class FishProjectile : MonoBehaviour
         }
 
         transform.position = trajectory.StartPos;
-        waterSurfaceY = ResolveWaterSurfaceY(trajectory.StartPos);
+        exitWaterY = ResolveWaterSurfaceY(trajectory.StartPos);
+        entryWaterY = ResolveWaterSurfaceY(trajectory.EndPos);
+        deflectWaterY = entryWaterY;
+        deflectWaterSampled = false;
         prevY = trajectory.StartPos.y;
         hasPlayedExitVfx = false;
         hasPlayedEntryVfx = false;
         hasPlayedMidRipple = false;
+
         Vector3 initialTangent = trajectory.EvaluateTangent(0f);
         if (initialTangent.sqrMagnitude > 0.0001f)
         {
@@ -125,7 +132,7 @@ public sealed class FishProjectile : MonoBehaviour
         if (trajectory.TelegraphDuration > 0.01f)
         {
             State = FishState.Telegraphing;
-            PlayRippleVfx(trajectory.StartPos);
+            PlayRippleVfx(trajectory.StartPos, exitWaterY);
         }
         else
         {
@@ -144,6 +151,7 @@ public sealed class FishProjectile : MonoBehaviour
         deflectVelocity = bounceVelocity;
         prevY = hitPosition.y;
         hasPlayedEntryVfx = false;
+        deflectWaterSampled = false;
         deflectSpinAxis = Vector3.Cross(Vector3.up, bounceVelocity);
         if (deflectSpinAxis.sqrMagnitude < 0.001f) deflectSpinAxis = Vector3.right;
         else deflectSpinAxis.Normalize();
@@ -198,10 +206,10 @@ public sealed class FishProjectile : MonoBehaviour
         transform.position = pos + side * shake;
 
         // Riak kedua di permukaan air tepat sebelum ikan melesat keluar
-        if (!hasPlayedMidRipple && progress >= 0.6f)
+        if (!hasPlayedMidRipple && progress >= 0.55f)
         {
             hasPlayedMidRipple = true;
-            PlayRippleVfx(trajectory.StartPos);
+            PlayRippleVfx(trajectory.StartPos, exitWaterY);
         }
 
         if (stateElapsed >= trajectory.TelegraphDuration)
@@ -248,6 +256,11 @@ public sealed class FishProjectile : MonoBehaviour
 
         if (t >= 1f)
         {
+            if (!hasPlayedEntryVfx)
+            {
+                hasPlayedEntryVfx = true;
+                PlayEntryVfx(pos, entryWaterY);
+            }
             CompleteAndReturnToPool();
         }
     }
@@ -262,10 +275,19 @@ public sealed class FishProjectile : MonoBehaviour
         transform.Rotate(deflectSpinAxis, deflectSpinSpeed * dt, Space.World);
 
         // Ikan terpental jatuh menembus permukaan air -> cipratan masuk air
-        if (!hasPlayedEntryVfx && deflectVelocity.y < 0f && prevY > waterSurfaceY && pos.y <= waterSurfaceY)
+        if (deflectVelocity.y < 0f)
         {
-            hasPlayedEntryVfx = true;
-            PlayEntryVfx(pos);
+            if (!deflectWaterSampled)
+            {
+                deflectWaterSampled = true;
+                deflectWaterY = ResolveWaterSurfaceY(pos);
+            }
+
+            if (!hasPlayedEntryVfx && prevY > deflectWaterY && pos.y <= deflectWaterY)
+            {
+                hasPlayedEntryVfx = true;
+                PlayEntryVfx(pos, deflectWaterY);
+            }
         }
         prevY = pos.y;
 
@@ -300,17 +322,17 @@ public sealed class FishProjectile : MonoBehaviour
         if (!hasPlayedExitVfx)
         {
             // Naik menembus permukaan air -> cipratan besar ke atas
-            if (pos.y >= waterSurfaceY)
+            if (pos.y >= exitWaterY)
             {
                 hasPlayedExitVfx = true;
-                PlayLeapVfx(pos);
+                PlayLeapVfx(pos, exitWaterY);
             }
         }
-        else if (!hasPlayedEntryVfx && prevY > waterSurfaceY && pos.y <= waterSurfaceY)
+        else if (!hasPlayedEntryVfx && prevY > entryWaterY && pos.y <= entryWaterY)
         {
             // Menukik kembali menembus permukaan air -> cipratan masuk air
             hasPlayedEntryVfx = true;
-            PlayEntryVfx(pos);
+            PlayEntryVfx(pos, entryWaterY);
         }
 
         prevY = pos.y;
@@ -328,24 +350,24 @@ public sealed class FishProjectile : MonoBehaviour
         return trajectory.SubmergeY + 1.6f;
     }
 
-    private Vector3 SurfacePoint(Vector3 pos)
+    private static Vector3 SurfacePoint(Vector3 pos, float waterY)
     {
-        return new Vector3(pos.x, waterSurfaceY + 0.03f, pos.z);
+        return new Vector3(pos.x, waterY + 0.03f, pos.z);
     }
 
-    private void PlayRippleVfx(Vector3 pos)
+    private void PlayRippleVfx(Vector3 pos, float waterY)
     {
-        WaterSplashVFX.PlayRipple(SurfacePoint(pos), rippleScale);
+        WaterSplashVFX.PlayRipple(SurfacePoint(pos, waterY), rippleScale);
     }
 
-    private void PlayLeapVfx(Vector3 pos)
+    private void PlayLeapVfx(Vector3 pos, float waterY)
     {
-        WaterSplashVFX.PlayLeapSplash(SurfacePoint(pos), leapSplashScale);
+        WaterSplashVFX.PlayLeapSplash(SurfacePoint(pos, waterY), leapSplashScale);
     }
 
-    private void PlayEntryVfx(Vector3 pos)
+    private void PlayEntryVfx(Vector3 pos, float waterY)
     {
-        WaterSplashVFX.PlayEntrySplash(SurfacePoint(pos), entrySplashScale);
+        WaterSplashVFX.PlayEntrySplash(SurfacePoint(pos, waterY), entrySplashScale);
     }
 
     private void PlaySplashSfx(float pitchRange)
