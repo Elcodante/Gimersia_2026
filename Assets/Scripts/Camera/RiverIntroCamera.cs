@@ -52,7 +52,7 @@ public class RiverIntroCamera : MonoBehaviour
     [Header("Teks Keterangan Singkat (Opsional)")]
     [SerializeField] private bool showIntroCaption = true;
     [SerializeField] private string goalCaptionTitle = "TUJUAN AKHIR";
-    [SerializeField] private string goalCaptionSubtitle = "Capai gerbang finis di hulu sungai!";
+    [SerializeField] private string goalCaptionSubtitle = "Capai Bebek di hulu sungai!";
     [SerializeField] private string glideCaptionSubtitle = "Menuju kapal...";
 
     /// <summary>Total durasi intro yang disinkronkan dengan GameSpawner di Server.</summary>

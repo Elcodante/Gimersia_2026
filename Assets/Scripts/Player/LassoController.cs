@@ -116,7 +116,7 @@ public class LassoController : NetworkBehaviour
 
     private void Update()
     {
-        if (IsOwner && Application.isFocused)
+        if (IsOwner && InputFocusGuard.CanAcceptInput)
         {
             HandleOwnerInput();
             UpdateMovementLock();

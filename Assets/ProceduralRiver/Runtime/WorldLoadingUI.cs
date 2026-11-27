@@ -174,17 +174,24 @@ public sealed class WorldLoadingUI : MonoBehaviour
 
     private void ReturnToMenuFromError()
     {
+        // Hide the persistent overlay before the menu scene loads, otherwise it would
+        // remain above the menu because this Canvas uses DontDestroyOnLoad.
+        gameObject.SetActive(false);
+
         ReturnToMenuController returnController = FindFirstObjectByType<ReturnToMenuController>();
         if (returnController != null)
         {
-            // Hide the persistent overlay before the menu scene loads, otherwise it would
-            // remain above the menu because this Canvas uses DontDestroyOnLoad.
-            gameObject.SetActive(false);
             returnController.ReturnToMainMenu();
         }
         else
         {
-            Debug.LogError("[WorldLoadingUI] ReturnToMenuController tidak ditemukan. Kembali ke Main Menu perlu dilakukan secara manual.");
+            Debug.LogWarning("[WorldLoadingUI] ReturnToMenuController tidak ditemukan. Menggunakan fallback langsung ke Main_Menu.");
+            if (Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsListening)
+            {
+                Unity.Netcode.NetworkManager.Singleton.Shutdown();
+            }
+            NetworkPlayerData.ConnectedPlayers.Clear();
+            UnityEngine.SceneManagement.SceneManager.LoadScene("Main_Menu");
         }
     }
 

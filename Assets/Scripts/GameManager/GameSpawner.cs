@@ -53,7 +53,7 @@ public class GameSpawner : NetworkBehaviour
 
     private readonly HashSet<ulong> spawnedClientIds = new HashSet<ulong>();
     private readonly HashSet<ulong> readyClientIds = new HashSet<ulong>();
-    private readonly Dictionary<ulong, int> assignedCharacterSlots = new Dictionary<ulong, int>();
+    private readonly SessionCharacterAllocator characterAllocator = new SessionCharacterAllocator();
     private bool sceneLoadEventReceived = false;
     private bool introTriggeredOnServer = false;
     private float waitTimer = 0f;
@@ -105,7 +105,7 @@ public class GameSpawner : NetworkBehaviour
             introTriggeredOnServer = false;
             spawnedClientIds.Clear();
             readyClientIds.Clear();
-            assignedCharacterSlots.Clear();
+            characterAllocator.BeginNewSession(ResolveCharacterVariantCount());
             sceneLoadEventReceived = false;
             waitTimer = 0f;
             ExpectedPlayerCount.Value = Mathf.Max(1, NetworkManager.Singleton.ConnectedClientsIds.Count);
@@ -273,34 +273,48 @@ public class GameSpawner : NetworkBehaviour
         }
     }
 
+    private int ResolveCharacterVariantCount()
+    {
+        if (playerPrefab != null)
+        {
+            PlayerCharacterAppearance prefabAppearance = playerPrefab.GetComponent<PlayerCharacterAppearance>();
+            if (prefabAppearance != null && prefabAppearance.CatalogVariantCount > 0)
+            {
+                return prefabAppearance.CatalogVariantCount;
+            }
+        }
+        return 4;
+    }
+
     private int AllocateUniqueCharacterSlot(ulong clientId)
     {
-        if (assignedCharacterSlots.TryGetValue(clientId, out int existingSlot))
-        {
-            return existingSlot;
-        }
-
-        int slot = 0;
-        while (assignedCharacterSlots.ContainsValue(slot))
-        {
-            slot++;
-        }
-
-        assignedCharacterSlots[clientId] = slot;
-        return slot;
+        return characterAllocator.Allocate(clientId);
     }
 
     private void HandleClientDisconnected(ulong clientId)
     {
         if (!IsServer) return;
 
-        assignedCharacterSlots.Remove(clientId);
+        characterAllocator.Release(clientId);
+        ClearDisconnectedPlayerBoatInputs(clientId);
 
         if (IsMatchStarted.Value) return;
 
         spawnedClientIds.Remove(clientId);
         readyClientIds.Remove(clientId);
         RefreshExpectedAndCheckStart();
+    }
+
+    private void ClearDisconnectedPlayerBoatInputs(ulong clientId)
+    {
+        BoatController boat = perahuNetworkObject != null
+            ? perahuNetworkObject.GetComponent<BoatController>()
+            : FindFirstObjectByType<BoatController>();
+
+        if (boat != null)
+        {
+            boat.ClearPlayerInputs(clientId);
+        }
     }
 
     /// <summary>

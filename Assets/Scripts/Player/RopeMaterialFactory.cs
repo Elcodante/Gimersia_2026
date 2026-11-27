@@ -24,7 +24,7 @@ public static class RopeMaterialFactory
     /// <summary>
     /// Tekstur tali berpilin: U = keliling tali, V = sepanjang tali. Seamless di kedua arah.
     /// </summary>
-    public static Texture2D CreateRopeTexture(int width = 64, int height = 96, int strands = 3, int twists = 2)
+    public static Texture2D CreateRopeTexture(int width = 64, int height = 64, int strands = 3, int twists = 2)
     {
         var tex = new Texture2D(width, height, TextureFormat.RGBA32, true, false)
         {

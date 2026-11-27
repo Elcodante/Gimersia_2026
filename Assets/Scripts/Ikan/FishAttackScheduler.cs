@@ -2,37 +2,40 @@ using UnityEngine;
 
 /// <summary>
 /// Penjadwal kemunculan serangan ikan secara acak namun dinamis.
-/// Menggunakan ritme acak (fase tenang vs gelombang ramai & peluang salvo beruntun),
+/// Menggunakan ritme acak (fase tenang vs gelombang ramai) berdasarkan FishPacingProfile,
 /// sepenuhnya independen dari jarak kapal ke tujuan akhir.
 /// </summary>
 public sealed class FishAttackScheduler
 {
-    private readonly float initialGraceSeconds;
-    private readonly float minWaveInterval;
-    private readonly float maxWaveInterval;
-    private readonly float minBurstSpacing;
-    private readonly float maxBurstSpacing;
-    private readonly int maxBurstCount;
+    private float initialGraceSeconds;
+    private float minWaveInterval;
+    private float maxWaveInterval;
+    private float minBurstSpacing;
+    private float maxBurstSpacing;
+    private int maxBurstCount;
+    private float minMultiBurstChance;
+    private float maxMultiBurstChance;
 
     private float timer;
     private int pendingBurstShots;
     private float tempoPhase;
     private float tempoSpeed;
 
-    public FishAttackScheduler(
-        float initialGraceSeconds,
-        float minWaveInterval,
-        float maxWaveInterval,
-        float minBurstSpacing,
-        float maxBurstSpacing,
-        int maxBurstCount)
+    public FishAttackScheduler(in FishPacingProfile profile)
     {
-        this.initialGraceSeconds = Mathf.Max(0.5f, initialGraceSeconds);
-        this.minWaveInterval = Mathf.Max(1f, minWaveInterval);
-        this.maxWaveInterval = Mathf.Max(this.minWaveInterval, maxWaveInterval);
-        this.minBurstSpacing = Mathf.Max(0.3f, minBurstSpacing);
-        this.maxBurstSpacing = Mathf.Max(this.minBurstSpacing, maxBurstSpacing);
-        this.maxBurstCount = Mathf.Clamp(maxBurstCount, 1, 4);
+        ApplyProfile(profile);
+    }
+
+    public void ApplyProfile(in FishPacingProfile profile)
+    {
+        initialGraceSeconds = Mathf.Max(1f, profile.initialGraceSeconds);
+        minWaveInterval = Mathf.Max(2f, profile.minWaveInterval);
+        maxWaveInterval = Mathf.Max(minWaveInterval + 0.5f, profile.maxWaveInterval);
+        minBurstSpacing = Mathf.Max(0.4f, profile.minBurstSpacing);
+        maxBurstSpacing = Mathf.Max(minBurstSpacing, profile.maxBurstSpacing);
+        maxBurstCount = Mathf.Clamp(profile.maxBurstCount, 1, 3);
+        minMultiBurstChance = Mathf.Clamp01(profile.minMultiBurstChance);
+        maxMultiBurstChance = Mathf.Clamp(profile.maxMultiBurstChance, minMultiBurstChance, 0.8f);
 
         Reset();
     }
@@ -41,8 +44,8 @@ public sealed class FishAttackScheduler
     {
         pendingBurstShots = 0;
         tempoPhase = Random.Range(0f, Mathf.PI * 2f);
-        tempoSpeed = Random.Range(0.08f, 0.16f);
-        timer = initialGraceSeconds + Random.Range(0f, 2.0f);
+        tempoSpeed = Random.Range(0.06f, 0.12f);
+        timer = initialGraceSeconds + Random.Range(0f, 3.0f);
     }
 
     /// <summary>
@@ -80,8 +83,8 @@ public sealed class FishAttackScheduler
     {
         // Faktor dinamis 0..1 yang bergeser acak seiring waktu agar jeda tidak monoton
         float dynamicFactor = 0.5f + 0.5f * Mathf.Sin(tempoPhase);
-        float biasedMax = Mathf.Lerp(maxWaveInterval, Mathf.Lerp(minWaveInterval, maxWaveInterval, 0.55f), dynamicFactor);
-        return Random.Range(minWaveInterval, Mathf.Max(minWaveInterval + 0.25f, biasedMax));
+        float biasedMax = Mathf.Lerp(maxWaveInterval, Mathf.Lerp(minWaveInterval, maxWaveInterval, 0.65f), dynamicFactor);
+        return Random.Range(minWaveInterval, Mathf.Max(minWaveInterval + 0.5f, biasedMax));
     }
 
     private int RollBurstSize()
@@ -91,11 +94,10 @@ public sealed class FishAttackScheduler
         float roll = Random.value;
         float livelyBonus = 0.5f + 0.5f * Mathf.Sin(tempoPhase);
 
-        // Mayoritas 1 ikan, sesekali 2 ikan beruntun, jarang 3 ikan saat momen ramai
-        float multiChance = Mathf.Lerp(0.22f, 0.45f, livelyBonus);
+        float multiChance = Mathf.Lerp(minMultiBurstChance, maxMultiBurstChance, livelyBonus);
         if (roll > multiChance) return 1;
 
-        if (maxBurstCount >= 3 && roll < multiChance * 0.28f)
+        if (maxBurstCount >= 3 && roll < multiChance * 0.25f)
         {
             return 3;
         }

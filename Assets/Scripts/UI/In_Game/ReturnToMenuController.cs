@@ -85,6 +85,9 @@ public class ReturnToMenuController : MonoBehaviour
             }
         }
 
+        // Bersihkan daftar pemain statis agar tidak menyisakan referensi stale antar sesi di tab browser yang sama
+        NetworkPlayerData.ConnectedPlayers.Clear();
+
         // 2. Pindah ke Main Menu secara lokal (hanya untuk pemain ini)
         if (SceneFadeTransition.Instance != null)
         {
