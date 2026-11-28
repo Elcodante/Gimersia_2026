@@ -10,6 +10,18 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
     [SerializeField] private float moveSpeed = 5f;
     [SerializeField] private float rotationSpeed = 10f;
 
+    [Header("Berjalan di Permukaan Kapal")]
+    [Tooltip("Aktifkan agar pemain otomatis menapak & bisa berjalan naik ke atas CapsuleCollider ban perahu.")]
+    [SerializeField] private bool snapToBoatSurface = true;
+    [Tooltip("Batas tinggi maksimal langkah yang bisa dinaiki pemain dari posisi kakinya (meter).")]
+    [SerializeField, Min(0.1f)] private float maxStepHeight = 1.25f;
+    [Tooltip("Kecepatan vertikal pemain naik/turun mengikuti kontur perahu (m/detik).")]
+    [SerializeField, Min(1f)] private float surfaceFollowSpeed = 10f;
+    [Tooltip("Jari-jari deteksi di bawah kaki agar mulus menaiki lengkungan kapsul.")]
+    [SerializeField, Range(0.05f, 0.5f)] private float footProbeRadius = 0.25f;
+    [Tooltip("Penyesuaian tambahan tinggi kaki di atas permukaan collider.")]
+    [SerializeField] private float footHeightOffset = 0f;
+
     [Header("Tenggelam")]
     [Tooltip("Pemain dianggap tenggelam bila pusatnya lebih rendah dari permukaan air sebesar ini.")]
     [SerializeField] private float drownDepthBelowWater = 0.8f;
@@ -35,6 +47,9 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
     [SerializeField, Range(0f, 0.8f)] private float waterEntryTriggerOffset = 0.25f;
 
     private Rigidbody rb;
+    private Collider playerMainCollider;
+    private readonly RaycastHit[] boatSurfaceHits = new RaycastHit[16];
+
     private bool isFallingOff = false;
     private bool remoteFallingOff = false;
     private bool isMovementLocked = false; // Dikontrol oleh LassoController
@@ -76,6 +91,7 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
     {
         rb = GetComponent<Rigidbody>();
         rb.interpolation = RigidbodyInterpolation.None;
+        playerMainCollider = ResolvePlayerMainCollider();
     }
 
     public override void OnNetworkSpawn()
@@ -84,6 +100,7 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
         rb.interpolation = RigidbodyInterpolation.None;
 
         CacheVisuals();
+        WaterSplashVFX.Prewarm();
         netHidden.OnValueChanged += OnHiddenChanged;
         SetRenderersVisible(!netHidden.Value);
 
@@ -109,8 +126,6 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
 
     private IEnumerator ReportReadyWhenParentedRoutine()
     {
-        // World generation is a prerequisite for player readiness. This prevents the host
-        // from starting the match while a client is still building its deterministic layout.
         const float timeoutSeconds = 180f;
         const float retryIntervalSeconds = 0.5f;
         float waited = 0f;
@@ -217,6 +232,11 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
 
         if (respawnLocked) return;
 
+        if (snapToBoatSurface && !isFallingOff && transform.parent != null)
+        {
+            UpdateBoatSurfaceHeight();
+        }
+
         CheckIfStillOnBoat();
 
         if (isFallingOff)
@@ -281,6 +301,90 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
             }
         }
     }
+
+    // ------------------------------------------------------------------ BERJALAN DI PERMUKAAN KAPAL
+
+    private Collider ResolvePlayerMainCollider()
+    {
+        Collider rootCol = GetComponent<Collider>();
+        if (rootCol != null && !rootCol.isTrigger) return rootCol;
+
+        foreach (Collider col in GetComponentsInChildren<Collider>(true))
+        {
+            if (col != null && !col.isTrigger) return col;
+        }
+        return null;
+    }
+
+    private float GetFeetDistanceBelowPivot()
+    {
+        if (playerMainCollider == null) playerMainCollider = ResolvePlayerMainCollider();
+
+        if (playerMainCollider is CapsuleCollider cap)
+        {
+            return -(cap.center.y - cap.height * 0.5f) * Mathf.Abs(transform.lossyScale.y);
+        }
+
+        if (playerMainCollider != null)
+        {
+            return Mathf.Max(0f, transform.position.y - playerMainCollider.bounds.min.y);
+        }
+
+        return 1f;
+    }
+
+    private void UpdateBoatSurfaceHeight()
+    {
+        float feetDist = GetFeetDistanceBelowPivot();
+        float currentFeetY = transform.position.y - feetDist;
+
+        // Mulai SphereCast dari atas batas langkah kaki ke arah bawah untuk mencari permukaan tertinggi kapal
+        float startY = currentFeetY + maxStepHeight + footProbeRadius + 0.25f;
+        Vector3 origin = new Vector3(transform.position.x, startY, transform.position.z);
+        float maxCastDist = maxStepHeight + footProbeRadius + 2.2f;
+
+        int hitCount = Physics.SphereCastNonAlloc(
+            origin,
+            footProbeRadius,
+            Vector3.down,
+            boatSurfaceHits,
+            maxCastDist,
+            ~0,
+            QueryTriggerInteraction.Ignore);
+
+        bool foundSurface = false;
+        float bestSurfaceY = float.MinValue;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            RaycastHit hit = boatSurfaceHits[i];
+            if (hit.collider == null || hit.distance <= 0.001f) continue;
+            if (hit.collider.transform == transform || hit.collider.transform.IsChildOf(transform)) continue;
+            if (hit.collider.GetComponentInParent<BoatController>() == null) continue;
+            if (hit.normal.y < 0.2f) continue;
+
+            // Abaikan permukaan yang lebih tinggi dari batas langkah pemain
+            if (hit.point.y > currentFeetY + maxStepHeight) continue;
+
+            if (hit.point.y > bestSurfaceY)
+            {
+                bestSurfaceY = hit.point.y;
+                foundSurface = true;
+            }
+        }
+
+        if (!foundSurface) return;
+
+        float targetWorldY = bestSurfaceY + feetDist + footHeightOffset;
+        Vector3 localPos = transform.localPosition;
+        float targetLocalY = transform.parent.InverseTransformPoint(
+            new Vector3(transform.position.x, targetWorldY, transform.position.z)).y;
+
+        localPos.y = Mathf.MoveTowards(localPos.y, targetLocalY, surfaceFollowSpeed * Time.deltaTime);
+        transform.localPosition = localPos;
+    }
+
+    // ------------------------------------------------------------------ JATUH DARI KAPAL & KNOCKBACK
 
     private void CheckIfStillOnBoat()
     {
@@ -377,14 +481,12 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
         remoteFallingOff = true;
         AudioManager.Instance?.PlaySFX("player_splash", 0.08f);
 
-        // Hanya pemilik yang mensimulasikan jatuh. Salinan di peer lain mengikuti NetworkTransform (kinematic),
-        // kalau tidak, fisika lokal dan posisi dari jaringan saling tarik sehingga jatuhnya terasa tersangkut.
+        // Hanya pemilik yang mensimulasikan jatuh. Salinan di peer lain mengikuti NetworkTransform (kinematic).
         rb.isKinematic = !IsOwner;
         rb.interpolation = IsOwner ? RigidbodyInterpolation.Interpolate : RigidbodyInterpolation.None;
 
         if (!IsOwner) return;
 
-        // Pastikan gravitasi aktif dan sumbu Y tidak terkunci
         rb.useGravity = true;
         rb.constraints &= ~RigidbodyConstraints.FreezePositionY;
         IgnoreCollisionWithRiver();
@@ -392,11 +494,8 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
         BoatController boat = FindFirstObjectByType<BoatController>();
         if (boat == null) return;
 
-        // Pastikan pemain tidak bertabrakan dengan badan kapal saat jatuh (flag ignore dipasang ulang)
         IgnoreCollisionWithBoat(boat);
 
-        // Kapal sekarang hanyut. Bawa kecepatan kapal + dorong sedikit menjauh, supaya buritan kapal
-        // yang bergerak tidak menyapu pemain yang jatuh tepat di belakangnya.
         Rigidbody boatRb = boat.GetComponent<Rigidbody>();
         Vector3 inherited = boatRb != null ? boatRb.linearVelocity : Vector3.zero;
         inherited.y = 0f;
@@ -499,7 +598,6 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
             return transform.position.y < waterY - drownDepthBelowWater;
         }
 
-        // Tanpa RiverPath: anggap tenggelam bila jauh di bawah kapal
         BoatController boat = FindFirstObjectByType<BoatController>();
         return boat != null && transform.position.y < boat.transform.position.y - 2.5f;
     }
@@ -525,7 +623,6 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
     {
         serverRespawning = true;
 
-        // Lepas tali kalau sedang menancap
         var lasso = GetComponent<LassoController>();
         if (lasso != null) lasso.ServerForceRelease();
 
@@ -573,7 +670,6 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
 
         if (points.Count == 0) return new Vector3(0f, 1.5f, 0f);
 
-        // Pilih titik yang paling jauh dari pemain lain; kalau sendirian, acak
         PlayerMovement[] others = FindObjectsByType<PlayerMovement>(FindObjectsSortMode.None);
         Transform best = null;
         float bestScore = float.MinValue;
@@ -619,7 +715,6 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
 
     private IEnumerator OwnerTeleportRoutine(Vector3 localSpawn)
     {
-        // Tunggu perubahan parent (ke kapal) sampai ke owner
         float waited = 0f;
         while (transform.parent == null && waited < 1.5f)
         {
@@ -729,7 +824,6 @@ public class PlayerMovement : NetworkBehaviour, IKnockbackable
 
         if (resolvedTargets.Length == 0)
         {
-            // Tidak ada bagian terpisah untuk di-skala: efek berkedip lalu tetap terlihat
             const int blinks = 6;
             for (int i = 0; i < blinks; i++)
             {

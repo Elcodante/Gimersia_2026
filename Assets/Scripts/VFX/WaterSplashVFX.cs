@@ -4,10 +4,9 @@ using UnityEngine.Rendering;
 /// <summary>
 /// Pemutar efek partikel air (cipratan) ber-pool untuk scene In_Game.
 /// Dipakai oleh:
-/// - FishProjectile  : riak saat ikan bersiap lompat, cipratan saat keluar air, cipratan saat nyemplung lagi.
-/// - PlayerMovement  : cipratan saat pemain jatuh/nyemplung ke air.
-/// Murni visual lokal (tidak butuh NetworkObject): tiap client memainkan efeknya sendiri
-/// dari event yang memang sudah tersinkron (RPC ikan &amp; status jatuh pemain).
+/// - FishProjectile        : riak saat ikan bersiap lompat, cipratan saat keluar air, cipratan saat nyemplung lagi.
+/// - PlayerMovement        : cipratan saat pemain jatuh/nyemplung ke air.
+/// - BoatImpactBroadcaster : cipratan air di sisi kapal saat kapal menyenggol/menabrak rintangan.
 /// Jika prefab di Inspector dikosongkan atau objek WaterSplashVFX belum dipasang di scene,
 /// sistem otomatis membuat efek partikel air prosedural yang di-pool (aman untuk WebGL/URP).
 /// </summary>
@@ -23,6 +22,8 @@ public sealed class WaterSplashVFX : MonoBehaviour
     [SerializeField] private ParticleSystem entrySplashPrefab;
     [Tooltip("Riak + gelembung kecil di permukaan air sebagai tanda ikan akan melompat.")]
     [SerializeField] private ParticleSystem ripplePrefab;
+    [Tooltip("Cipratan air di sisi kapal saat menyenggol/menabrak batu, sampah, atau tepian.")]
+    [SerializeField] private ParticleSystem hullImpactSplashPrefab;
 
     [Header("Pool")]
     [Tooltip("Jumlah instance per jenis efek yang di-prewarm dan didaur ulang bergantian.")]
@@ -31,6 +32,7 @@ public sealed class WaterSplashVFX : MonoBehaviour
     private Pool leapPool;
     private Pool entryPool;
     private Pool ripplePool;
+    private Pool hullImpactPool;
     private bool poolsInitialized;
 
     private static Texture2D sharedDropletTexture;
@@ -75,21 +77,35 @@ public sealed class WaterSplashVFX : MonoBehaviour
     public static void PlayLeapSplash(Vector3 position, float scale = 1f)
     {
         WaterSplashVFX vfx = EnsureInstance();
-        vfx?.leapPool?.Play(position, scale);
+        vfx?.leapPool?.Play(position, Quaternion.identity, scale);
     }
 
     /// <summary>Cipratan saat ikan / pemain masuk ke air.</summary>
     public static void PlayEntrySplash(Vector3 position, float scale = 1f)
     {
         WaterSplashVFX vfx = EnsureInstance();
-        vfx?.entryPool?.Play(position, scale);
+        vfx?.entryPool?.Play(position, Quaternion.identity, scale);
     }
 
     /// <summary>Riak kecil di permukaan air (telegraph sebelum ikan melompat).</summary>
     public static void PlayRipple(Vector3 position, float scale = 1f)
     {
         WaterSplashVFX vfx = EnsureInstance();
-        vfx?.ripplePool?.Play(position, scale);
+        vfx?.ripplePool?.Play(position, Quaternion.identity, scale);
+    }
+
+    /// <summary>Cipratan air di sisi kapal yang menabrak rintangan.</summary>
+    public static void PlayBoatImpactSplash(Vector3 position, Vector3 outwardNormal, float scale = 1f)
+    {
+        WaterSplashVFX vfx = EnsureInstance();
+        if (vfx == null || vfx.hullImpactPool == null) return;
+
+        outwardNormal.y = 0f;
+        Quaternion rot = outwardNormal.sqrMagnitude > 0.001f
+            ? Quaternion.LookRotation(outwardNormal.normalized, Vector3.up)
+            : Quaternion.identity;
+
+        vfx.hullImpactPool.Play(position, rot, scale);
     }
 
     private static WaterSplashVFX EnsureInstance()
@@ -132,6 +148,10 @@ public sealed class WaterSplashVFX : MonoBehaviour
         bool customRipple = ripplePrefab != null;
         ParticleSystem rippleTemplate = customRipple ? ripplePrefab : CreateProceduralRippleTemplate();
         ripplePool = new Pool(rippleTemplate, count, transform, destroyTemplateAfterClone: !customRipple);
+
+        bool customHull = hullImpactSplashPrefab != null;
+        ParticleSystem hullTemplate = customHull ? hullImpactSplashPrefab : CreateProceduralHullImpactTemplate();
+        hullImpactPool = new Pool(hullTemplate, count, transform, destroyTemplateAfterClone: !customHull);
     }
 
     // ------------------------------------------------------------------ POOL
@@ -166,7 +186,7 @@ public sealed class WaterSplashVFX : MonoBehaviour
             }
         }
 
-        public void Play(Vector3 position, float scale)
+        public void Play(Vector3 position, Quaternion rotation, float scale)
         {
             if (items.Length == 0) return;
 
@@ -175,7 +195,7 @@ public sealed class WaterSplashVFX : MonoBehaviour
             if (ps == null) return;
 
             Transform t = ps.transform;
-            t.SetPositionAndRotation(position, Quaternion.identity);
+            t.SetPositionAndRotation(position, rotation);
             t.localScale = Vector3.one * Mathf.Max(0.05f, scale);
 
             ps.Clear(true);
@@ -238,7 +258,6 @@ public sealed class WaterSplashVFX : MonoBehaviour
 
         ConfigureRenderer(ringPs, GetRingMaterial(), ParticleSystemRenderMode.HorizontalBillboard);
 
-        // Gelembung/percikan kecil di permukaan sebelum ikan melesat
         GameObject bubblesObj = new GameObject("RippleBubbles");
         bubblesObj.transform.SetParent(root.transform, false);
         ParticleSystem bubblesPs = bubblesObj.AddComponent<ParticleSystem>();
@@ -281,7 +300,6 @@ public sealed class WaterSplashVFX : MonoBehaviour
         GameObject root = new GameObject("ProceduralLeapSplash");
         root.SetActive(false);
 
-        // 1. Semburan tetesan air ke atas saat ikan menembus permukaan
         ParticleSystem dropPs = root.AddComponent<ParticleSystem>();
         ParticleSystem.MainModule main = dropPs.main;
         main.playOnAwake = false;
@@ -321,10 +339,7 @@ public sealed class WaterSplashVFX : MonoBehaviour
 
         ConfigureRenderer(dropPs, GetDropletMaterial(), ParticleSystemRenderMode.Billboard);
 
-        // 2. Kabut busa putih di permukaan
         AddFoamChild(root.transform, "LeapFoam", burstCount: 7, coneAngle: 42f, minSpeed: 1.5f, maxSpeed: 3.0f, minSize: 0.48f, maxSize: 0.85f);
-
-        // 3. Cincin riak pecah di permukaan air
         AddRingChild(root.transform, "LeapRing", ringSize: 2.6f, twoBursts: false);
 
         return dropPs;
@@ -335,7 +350,6 @@ public sealed class WaterSplashVFX : MonoBehaviour
         GameObject root = new GameObject("ProceduralEntrySplash");
         root.SetActive(false);
 
-        // 1. Mahkota cipratan menyebar (lebih lebar saat benda jatuh nyemplung ke air)
         ParticleSystem dropPs = root.AddComponent<ParticleSystem>();
         ParticleSystem.MainModule main = dropPs.main;
         main.playOnAwake = false;
@@ -375,11 +389,59 @@ public sealed class WaterSplashVFX : MonoBehaviour
 
         ConfigureRenderer(dropPs, GetDropletMaterial(), ParticleSystemRenderMode.Billboard);
 
-        // 2. Busa putih di permukaan
         AddFoamChild(root.transform, "EntryFoam", burstCount: 8, coneAngle: 55f, minSpeed: 1.2f, maxSpeed: 2.6f, minSize: 0.52f, maxSize: 0.95f);
-
-        // 3. Dua gelombang cincin air membesar
         AddRingChild(root.transform, "EntryRing", ringSize: 3.1f, twoBursts: true);
+
+        return dropPs;
+    }
+
+    private static ParticleSystem CreateProceduralHullImpactTemplate()
+    {
+        GameObject root = new GameObject("ProceduralHullImpactSplash");
+        root.SetActive(false);
+
+        // Semburan air di sisi lambung kapal yang menabrak rintangan
+        ParticleSystem dropPs = root.AddComponent<ParticleSystem>();
+        ParticleSystem.MainModule main = dropPs.main;
+        main.playOnAwake = false;
+        main.loop = false;
+        main.duration = 0.85f;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.35f, 0.68f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(2.8f, 6.2f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.14f, 0.30f);
+        main.gravityModifier = 1.65f;
+        main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.76f, 0.96f, 1f, 0.95f), Color.white);
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+        main.maxParticles = 24;
+
+        ParticleSystem.EmissionModule emit = dropPs.emission;
+        emit.enabled = true;
+        emit.rateOverTime = 0f;
+        emit.SetBursts(new[] { new ParticleSystem.Burst(0f, 18) });
+
+        ParticleSystem.ShapeModule shape = dropPs.shape;
+        shape.enabled = true;
+        shape.shapeType = ParticleSystemShapeType.Cone;
+        shape.angle = 38f;
+        shape.radius = 0.28f;
+        shape.rotation = new Vector3(-76f, 0f, 0f); // Menyembur ke atas dan sedikit ke arah sisi kapal
+
+        ParticleSystem.SizeOverLifetimeModule sizeMod = dropPs.sizeOverLifetime;
+        sizeMod.enabled = true;
+        sizeMod.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+            new Keyframe(0f, 0.90f),
+            new Keyframe(0.35f, 1f),
+            new Keyframe(1f, 0.20f)));
+
+        ParticleSystem.ColorOverLifetimeModule colMod = dropPs.colorOverLifetime;
+        colMod.enabled = true;
+        colMod.color = MakeAlphaGradient(1f, 0.9f, 0.6f, 0f);
+
+        ConfigureRenderer(dropPs, GetDropletMaterial(), ParticleSystemRenderMode.Billboard);
+
+        AddFoamChild(root.transform, "HullImpactFoam", burstCount: 6, coneAngle: 48f, minSpeed: 0.9f, maxSpeed: 2.2f, minSize: 0.36f, maxSize: 0.68f);
+        AddRingChild(root.transform, "HullImpactRing", ringSize: 2.2f, twoBursts: false);
 
         return dropPs;
     }
@@ -617,7 +679,6 @@ public sealed class WaterSplashVFX : MonoBehaviour
                 float nx = (x + 0.5f) * invHalf - 1f;
                 float r = Mathf.Sqrt(nx * nx + ny * ny);
 
-                // Puncak cincin berada di radius 0.72, lembut di sisi dalam dan luar
                 float band = 1f - Mathf.Clamp01(Mathf.Abs(r - 0.72f) / 0.26f);
                 float a = band * band * (3f - 2f * band);
                 pixels[row + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(a * 255f));

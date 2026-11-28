@@ -26,7 +26,7 @@ RenderSettings:
   m_AmbientIntensity: 1
   m_AmbientMode: 0
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
-  m_SkyboxMaterial: {fileID: 10304, guid: 0000000000000000f000000000000000, type: 0}
+  m_SkyboxMaterial: {fileID: 2100000, guid: 0f1401d983cde1c49a7f687a57e62c5a, type: 2}
   m_HaloStrength: 0.5
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
@@ -751,6 +751,8 @@ MonoBehaviour:
   enableIdlePulse: 0
   pulseAmplitude: 0.03
   pulseFrequency: 0.55
+  hoverSfxId: ui_hover
+  clickSfxId: ui_click
 --- !u!1 &132057519
 GameObject:
   m_ObjectHideFlags: 0
@@ -1701,6 +1703,8 @@ MonoBehaviour:
   enableIdlePulse: 0
   pulseAmplitude: 0.03
   pulseFrequency: 0.55
+  hoverSfxId: ui_hover
+  clickSfxId: ui_click
 --- !u!1 &407320510
 GameObject:
   m_ObjectHideFlags: 0
@@ -1846,6 +1850,8 @@ MonoBehaviour:
   enableIdlePulse: 0
   pulseAmplitude: 0.03
   pulseFrequency: 0.55
+  hoverSfxId: ui_hover
+  clickSfxId: ui_click
 --- !u!1 &488866008
 GameObject:
   m_ObjectHideFlags: 0
@@ -2122,6 +2128,8 @@ MonoBehaviour:
   enableIdlePulse: 0
   pulseAmplitude: 0.03
   pulseFrequency: 0.55
+  hoverSfxId: ui_hover
+  clickSfxId: ui_click
 --- !u!1 &631638240
 GameObject:
   m_ObjectHideFlags: 0
@@ -2882,6 +2890,8 @@ MonoBehaviour:
   enableIdlePulse: 0
   pulseAmplitude: 0.03
   pulseFrequency: 0.55
+  hoverSfxId: ui_hover
+  clickSfxId: ui_click
 --- !u!1 &865150541
 GameObject:
   m_ObjectHideFlags: 0
@@ -5148,6 +5158,8 @@ MonoBehaviour:
   enableIdlePulse: 0
   pulseAmplitude: 0.03
   pulseFrequency: 0.55
+  hoverSfxId: ui_hover
+  clickSfxId: ui_click
 --- !u!1 &1509340579
 GameObject:
   m_ObjectHideFlags: 0
@@ -5500,6 +5512,8 @@ MonoBehaviour:
   enableIdlePulse: 0
   pulseAmplitude: 0.03
   pulseFrequency: 0.55
+  hoverSfxId: ui_hover
+  clickSfxId: ui_click
 --- !u!1 &1652128533
 GameObject:
   m_ObjectHideFlags: 0
@@ -5720,6 +5734,8 @@ MonoBehaviour:
   enableIdlePulse: 0
   pulseAmplitude: 0.03
   pulseFrequency: 0.55
+  hoverSfxId: ui_hover
+  clickSfxId: ui_click
 --- !u!1 &1714675828
 GameObject:
   m_ObjectHideFlags: 0
@@ -5940,6 +5956,8 @@ MonoBehaviour:
   enableIdlePulse: 0
   pulseAmplitude: 0.03
   pulseFrequency: 0.55
+  hoverSfxId: ui_hover
+  clickSfxId: ui_click
 --- !u!1 &1849478599
 GameObject:
   m_ObjectHideFlags: 0
@@ -6085,6 +6103,8 @@ MonoBehaviour:
   enableIdlePulse: 0
   pulseAmplitude: 0.03
   pulseFrequency: 0.55
+  hoverSfxId: ui_hover
+  clickSfxId: ui_click
 --- !u!1 &1868770441
 GameObject:
   m_ObjectHideFlags: 0

@@ -20,8 +20,17 @@ public class LassoController : NetworkBehaviour
     [SerializeField] private float aimFollowSpeed = 8f;
     [SerializeField] private float catchRadius = 1.5f;
 
-    [Header("Pengaturan Tarikan Halus (Hold F)")]
-    [SerializeField] private float trashTugInterval = 0.55f;     // Jeda tiap 1x getaran & hitungan cabut sampah
+    [Header("Pengaturan Tarikan & Irama Tangan (1___1___1)")]
+    [SerializeField] private float trashTugInterval = 0.55f;     // Dipakai jika Sync Trash Tug To Rhythm dimatikan
+    [Tooltip("Sinkronkan getaran/hitungan cabut sampah tepat pada tiap tarikan tangan (1___1___1).")]
+    [SerializeField] private bool syncTrashTugToRhythm = true;
+    [Tooltip("Frekuensi tarikan cadangan jika BoatController tidak ditemukan (otomatis disamakan dengan BoatController).")]
+    [SerializeField] private float fallbackPullCadenceFrequency = 1.20f;
+    [SerializeField, Range(0.2f, 0.8f)] private float fallbackPullStrokeDuty = 0.45f;
+    [Tooltip("Seberapa jauh pangkal tali ikut tertarik mundur oleh tangan (meter).")]
+    [SerializeField] private float handPullBackOffset = 0.28f;
+    [Tooltip("Jarak geser pangkal tali antara tangan kanan dan kiri (meter).")]
+    [SerializeField] private float handSwitchSideOffset = 0.22f;
 
     [Header("Pengaturan Kendur & Putus Tali")]
     [SerializeField] private Key slackKey = Key.G;
@@ -29,10 +38,10 @@ public class LassoController : NetworkBehaviour
     [Tooltip("Jarak putus: tali lepas otomatis kalau kapal terseret lebih jauh dari ini.")]
     [SerializeField] private float maxRopeLength = 28.0f;
     [Tooltip("Kecepatan menggulung tali kendor saat F ditahan (m/detik). Makin kecil = tali mengencang makin pelan/halus.")]
-    [SerializeField] private float ropeReelSpeed = 5.0f;   // kecepatan gulung MAKSIMUM (saat kendor banyak)
+    [SerializeField] private float ropeReelSpeed = 6.5f;   // kecepatan gulung MAKSIMUM (saat kendor banyak)
     [Tooltip("Gulungan melambat saat kendor tinggal sedikit agar tali mengencang halus, tidak menyentak. Kecepatan = kendor (m) x nilai ini, dibatasi Min dan Max.")]
-    [SerializeField] private float ropeReelEase = 1.5f;
-    [SerializeField] private float ropeReelMinSpeed = 0.8f;
+    [SerializeField] private float ropeReelEase = 1.8f;
+    [SerializeField] private float ropeReelMinSpeed = 1.0f;
     [SerializeField] private float slackSagMultiplier = 0.45f;   // hanya dipakai jika Use Verlet Rope dimatikan
 
     [Header("Visual Tali 3D (ragdoll-like / Verlet)")]
@@ -55,6 +64,7 @@ public class LassoController : NetworkBehaviour
     private LineRenderer lineRenderer;
     private BoatController boatController;
     private PlayerMovement playerMovement;
+    private PlayerSwayAnimator swayAnimator;
 
     private bool isLocalAiming = false;
     private Vector3 delayedAimPoint;
@@ -69,22 +79,35 @@ public class LassoController : NetworkBehaviour
     private bool serverPullHeld = false;
     private bool serverSlackHeld = false;
     private float trashTugTimer = 0f;
+    private float serverPullHoldTime = 0f;
+    private int lastServerTrashStroke = -1;
+
+    // State irama visual lokal (owner + remote client)
+    private bool pullingVisualActive = false;
+    private float localPullElapsed = 0f;
+    private Vector3 currentPullDir = Vector3.forward;
+    private float currentVisualHandSide = 1f;
+    private float currentTugPulse = 0f;
+    private float currentReachPulse = 0f;
 
     private NetworkVariable<LassoState> netState = new NetworkVariable<LassoState>(LassoState.Idle);
     private NetworkVariable<Vector3> netTargetPoint = new NetworkVariable<Vector3>();
     private NetworkVariable<float> netProgress = new NetworkVariable<float>(0f);
     private NetworkVariable<float> netRopeLength = new NetworkVariable<float>(0f);
     private NetworkVariable<float> netRopeTension = new NetworkVariable<float>(0f);
+    private NetworkVariable<bool> netIsPulling = new NetworkVariable<bool>(false);
 
     private Coroutine serverSequenceCoroutine;
 
-    // Panjang maksimal tali boleh dikendorkan (G) = jarak lempar maksimal.
     private float MaxSlackLength => Mathf.Min(lassoRange, maxRopeLength);
+    private float EffectiveCadenceFreq => boatController != null ? boatController.PullCadenceFrequency : fallbackPullCadenceFrequency;
+    private float EffectiveStrokeDuty => boatController != null ? boatController.PullStrokeDuty : fallbackPullStrokeDuty;
 
     private void Awake()
     {
         lineRenderer = GetComponent<LineRenderer>();
         playerMovement = GetComponent<PlayerMovement>();
+        swayAnimator = GetComponent<PlayerSwayAnimator>();
         lineRenderer.enabled = false;
 
         if (useVerletRope)
@@ -121,6 +144,8 @@ public class LassoController : NetworkBehaviour
             HandleOwnerInput();
             UpdateMovementLock();
         }
+
+        UpdatePullRhythmVisuals();
     }
 
     // LateUpdate: supaya pangkal tali ikut posisi tangan setelah pemain/kapal selesai bergerak
@@ -131,7 +156,6 @@ public class LassoController : NetworkBehaviour
 
     private void HandleOwnerInput()
     {
-        // Tahan input laso sampai seluruh pemain selesai spawn, atau saat sedang jatuh/tenggelam/respawn
         if (!GameSpawner.IsMatchReady || (playerMovement != null && (playerMovement.IsRespawning || playerMovement.IsOffBoatOrRespawning)))
         {
             isLocalAiming = false;
@@ -156,16 +180,7 @@ public class LassoController : NetworkBehaviour
                 Vector3 rawTarget = GetCursorWorldPoint();
                 delayedAimPoint = Vector3.Lerp(delayedAimPoint, rawTarget, aimFollowSpeed * Time.deltaTime);
 
-                Vector3 lookDir = delayedAimPoint - transform.position;
-                lookDir.y = 0f;
-                if (lookDir.sqrMagnitude > 0.001f)
-                {
-                    transform.rotation = Quaternion.Slerp(
-                        transform.rotation,
-                        Quaternion.LookRotation(lookDir),
-                        15f * Time.deltaTime
-                    );
-                }
+                FaceWorldPoint(delayedAimPoint, 15f);
             }
             else if (Mouse.current != null && Mouse.current.leftButton.wasReleasedThisFrame)
             {
@@ -175,6 +190,9 @@ public class LassoController : NetworkBehaviour
         }
         else if (currentState == LassoState.Pulling)
         {
+            // Tetap menghadap batu/sampah yang ditarik meski kapal berputar
+            FaceWorldPoint(netTargetPoint.Value, 12f);
+
             bool pullHeld = Keyboard.current != null && Keyboard.current.fKey.isPressed;
             bool slackHeld = Keyboard.current != null && Keyboard.current[slackKey].isPressed;
 
@@ -195,6 +213,94 @@ public class LassoController : NetworkBehaviour
             lastSentPullHeld = false;
             lastSentSlackHeld = false;
         }
+    }
+
+    private void FaceWorldPoint(Vector3 worldPoint, float speed)
+    {
+        Vector3 lookDir = worldPoint - transform.position;
+        lookDir.y = 0f;
+        if (lookDir.sqrMagnitude <= 0.001f) return;
+
+        Quaternion targetWorldRot = Quaternion.LookRotation(lookDir.normalized, Vector3.up);
+        if (transform.parent != null)
+        {
+            Quaternion targetLocalRot = Quaternion.Inverse(transform.parent.rotation) * targetWorldRot;
+            transform.localRotation = Quaternion.Slerp(transform.localRotation, targetLocalRot, speed * Time.deltaTime);
+        }
+        else
+        {
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetWorldRot, speed * Time.deltaTime);
+        }
+    }
+
+    private void UpdatePullRhythmVisuals()
+    {
+        if (boatController == null) boatController = FindFirstObjectByType<BoatController>();
+
+        bool isPullingNow = IsSpawned
+            && netState.Value == LassoState.Pulling
+            && (playerMovement == null || !playerMovement.IsOffBoatOrRespawning)
+            && (IsOwner
+                ? (InputFocusGuard.CanAcceptInput && !isLocalAiming && Keyboard.current != null && Keyboard.current.fKey.isPressed && netIsPulling.Value || (IsOwner && Keyboard.current != null && Keyboard.current.fKey.isPressed && InputFocusGuard.CanAcceptInput && !isLocalAiming && !IsServer))
+                : netIsPulling.Value);
+
+        // Gunakan status jaringan sebagai otoritas saat menyentuh batu target,
+        // namun tetap responsif di frame pertama owner menekan F.
+        if (IsOwner)
+        {
+            bool localKeyF = InputFocusGuard.CanAcceptInput && !isLocalAiming && Keyboard.current != null && Keyboard.current.fKey.isPressed;
+            isPullingNow = IsSpawned
+                && netState.Value == LassoState.Pulling
+                && (playerMovement == null || !playerMovement.IsOffBoatOrRespawning)
+                && localKeyF
+                && (netIsPulling.Value || !lastSentPullHeld);
+        }
+
+        if (!isPullingNow)
+        {
+            pullingVisualActive = false;
+            localPullElapsed = 0f;
+            currentTugPulse = 0f;
+            currentReachPulse = 0f;
+            swayAnimator?.SetPullRhythm(false, Vector3.forward, 1f, 0f, 0f);
+            return;
+        }
+
+        pullingVisualActive = true;
+        localPullElapsed += Time.deltaTime;
+
+        Vector3 dir = netTargetPoint.Value - transform.position;
+        dir.y = 0f;
+        currentPullDir = dir.sqrMagnitude > 0.001f ? dir.normalized : transform.forward;
+
+        float freq = Mathf.Max(0.1f, EffectiveCadenceFreq);
+        float duty = Mathf.Clamp(EffectiveStrokeDuty, 0.15f, 0.85f);
+
+        float cycle = localPullElapsed * freq;
+        int strokeIndex = Mathf.FloorToInt(cycle);
+        float phase = cycle - strokeIndex;
+
+        float handSign = (strokeIndex % 2 == 0) ? 1f : -1f; // +1 tangan kanan, -1 tangan kiri
+
+        if (phase < duty)
+        {
+            float u = phase / duty;
+            float s = Mathf.Sin(Mathf.Pow(u, 0.75f) * Mathf.PI);
+            currentTugPulse = s;
+            currentReachPulse = 0f;
+            currentVisualHandSide = handSign;
+        }
+        else
+        {
+            float v = (phase - duty) / Mathf.Max(0.01f, 1f - duty);
+            float smooth = v * v * (3f - 2f * v);
+            currentTugPulse = 0f;
+            currentReachPulse = Mathf.Sin(v * Mathf.PI);
+            // Geser mulus posisi tangan dari sisi lama ke sisi tangan berikutnya selama jeda '___'
+            currentVisualHandSide = Mathf.Lerp(handSign, -handSign, smooth);
+        }
+
+        swayAnimator?.SetPullRhythm(true, currentPullDir, currentVisualHandSide, currentTugPulse, currentReachPulse);
     }
 
     private void UpdateMovementLock()
@@ -232,7 +338,21 @@ public class LassoController : NetworkBehaviour
 
     private Vector3 GetRopeOrigin()
     {
-        return (handAnchor != null) ? handAnchor.position : transform.position + Vector3.up * 0.5f;
+        Vector3 baseOrigin = (handAnchor != null) ? handAnchor.position : transform.position + Vector3.up * 0.5f;
+        if (!pullingVisualActive) return baseOrigin;
+
+        Vector3 fwd = currentPullDir;
+        if (fwd.sqrMagnitude < 0.001f)
+        {
+            fwd = transform.forward;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude > 0.001f) fwd.Normalize();
+            else fwd = Vector3.forward;
+        }
+
+        Vector3 right = Vector3.Cross(Vector3.up, fwd).normalized;
+        float forwardBack = (currentReachPulse * handPullBackOffset * 0.45f) - (currentTugPulse * handPullBackOffset);
+        return baseOrigin + fwd * forwardBack + right * (currentVisualHandSide * handSwitchSideOffset);
     }
 
     private static Vector3 ArcPoint(Vector3 start, Vector3 end, float t, float arcHeight)
@@ -303,7 +423,6 @@ public class LassoController : NetworkBehaviour
 
             case LassoState.Throwing:
             {
-                // Ujung tali terbang mengikuti parabola, sisa tali menjuntai di belakangnya
                 Vector3 tip = ArcPoint(origin, netTargetPoint.Value, netProgress.Value, maxArcHeight);
                 ropeVisual.Drive(origin, tip, Vector3.Distance(origin, tip) * 1.1f + 0.15f);
                 break;
@@ -311,17 +430,21 @@ public class LassoController : NetworkBehaviour
 
             case LassoState.Pulling:
             {
-                // Samakan referensi kendor dengan pusat player (seperti di server) agar tali tegang saat ditarik
                 Vector3 anchor = netTargetPoint.Value;
                 float chord = Vector3.Distance(origin, anchor);
                 float flatDist = FlatDistance(transform.position, anchor);
                 float slack = Mathf.Max(0f, netRopeLength.Value - flatDist);
                 float ropeLen3D = chord + slack;
 
-                // Murni dari geometri (kendor vs jarak) dan dihaluskan, supaya tali mengencang bertahap, tidak "dihentak".
                 float slackRatio = slack / Mathf.Max(0.01f, ropeLen3D);
                 float k = Mathf.Clamp01(slackRatio / 0.12f);
                 float taut = 1f - k * k * (3f - 2f * k);
+
+                // Modulasi ketegangan tali mengikuti denyut tangan (1___1___1)
+                if (pullingVisualActive)
+                {
+                    taut *= Mathf.Lerp(0.70f, 1f, currentTugPulse);
+                }
 
                 ropeVisual.Drive(origin, anchor, ropeLen3D, taut);
                 break;
@@ -360,7 +483,6 @@ public class LassoController : NetworkBehaviour
     {
         if (!GameSpawner.IsMatchReady || netState.Value != LassoState.Idle) return;
 
-        // Server-side range validation: never trust a client-supplied landing point.
         if (FlatDistance(transform.position, landingPoint) > lassoRange + 0.25f)
         {
             if (serverSequenceCoroutine != null) StopCoroutine(serverSequenceCoroutine);
@@ -383,6 +505,7 @@ public class LassoController : NetworkBehaviour
     {
         netTargetPoint.Value = landingPoint;
         netProgress.Value = 0f;
+        netIsPulling.Value = false;
         netState.Value = LassoState.Throwing;
         PlayLassoSfxClientRpc("lasso_throw", 0.08f);
 
@@ -418,6 +541,9 @@ public class LassoController : NetworkBehaviour
             serverPullHeld = false;
             serverSlackHeld = false;
             trashTugTimer = 0f;
+            serverPullHoldTime = 0f;
+            lastServerTrashStroke = -1;
+            netIsPulling.Value = false;
             netState.Value = LassoState.Pulling;
 
             while (netState.Value == LassoState.Pulling)
@@ -443,7 +569,6 @@ public class LassoController : NetworkBehaviour
                     ? latchedTrashCollider
                     : latchedRockCollider;
 
-                // Sampah ikut hanyut: kirim posisi terbaru agar ujung tali di semua client ikut bergerak
                 if (latchedTrash != null && (netTargetPoint.Value - activeTargetPos).sqrMagnitude > 0.0004f)
                 {
                     netTargetPoint.Value = activeTargetPos;
@@ -451,7 +576,6 @@ public class LassoController : NetworkBehaviour
 
                 float actualDist = FlatDistance(transform.position, activeTargetPos);
 
-                // Kapal terseret terlalu jauh dari batu (mis. terbawa arus): tali putus/lepas di kondisi apa pun
                 if (actualDist >= maxRopeLength)
                 {
                     StopPullAndReset(true);
@@ -460,16 +584,16 @@ public class LassoController : NetworkBehaviour
 
                 if (serverPullHeld)
                 {
-                    // Jika target adalah BATU dan kapal sudah menyentuh batu target:
-                    // hentikan gaya tarik F, tetapi tali tetap menancap di batu.
                     if (latchedRockTransform != null && boatController != null &&
                         boatController.IsTouchingOrAtSurface(latchedRockCollider, activeTargetPos))
                     {
+                        netIsPulling.Value = false;
+                        serverPullHoldTime = 0f;
+                        lastServerTrashStroke = -1;
+
                         boatController.SetPlayerPull(OwnerClientId, false, activeTargetPos, transform.position, activeTargetCol);
                         boatController.SetPlayerTether(OwnerClientId, false, activeTargetPos, transform.position, netRopeLength.Value);
 
-                        // Kapal menempel di batu (mis. hanyut lalu nyangkut): gaya tarik berhenti, TAPI tali kendor
-                        // tetap digulung pelan sampai tegang.
                         if (netRopeLength.Value > actualDist)
                         {
                             netRopeLength.Value = Mathf.Max(actualDist, netRopeLength.Value - ReelRate(netRopeLength.Value - actualDist) * Time.deltaTime);
@@ -486,14 +610,15 @@ public class LassoController : NetworkBehaviour
                         continue;
                     }
 
-                    // Tarikan halus & kontinu ke BoatController
+                    netIsPulling.Value = true;
+                    serverPullHoldTime += Time.deltaTime;
+
                     if (boatController != null)
                     {
                         boatController.SetPlayerTether(OwnerClientId, false, activeTargetPos, transform.position, netRopeLength.Value);
                         boatController.SetPlayerPull(OwnerClientId, true, activeTargetPos, transform.position, activeTargetCol);
                     }
 
-                    // Gulung tali kendor + ikut kurangi jarak yang sudah ditempuh kapal agar tali tidak malah mengendur saat F ditahan
                     float boatClosed = Mathf.Max(0f, prevActualDist - actualDist);
                     if (netRopeLength.Value > actualDist)
                     {
@@ -501,36 +626,60 @@ public class LassoController : NetworkBehaviour
                         netRopeLength.Value = Mathf.Max(0.5f, Mathf.Max(actualDist, netRopeLength.Value - reelDelta));
                     }
 
-                    // Ketegangan visual tali mengikuti irama tarikan lembut
-                    float targetTension = 0.85f + 0.15f * Mathf.Sin(Time.time * 5f);
-                    netRopeTension.Value = Mathf.MoveTowards(netRopeTension.Value, targetTension, 4f * Time.deltaTime);
+                    // Ketegangan visual mengikuti irama 1___1___1
+                    float freq = Mathf.Max(0.1f, EffectiveCadenceFreq);
+                    float duty = Mathf.Clamp(EffectiveStrokeDuty, 0.15f, 0.85f);
+                    float phase = Mathf.Repeat(serverPullHoldTime * freq, 1f);
+                    float pulse = phase < duty ? Mathf.Sin((phase / duty) * Mathf.PI) : 0f;
+                    float targetTension = Mathf.Lerp(0.45f, 1f, pulse);
+                    netRopeTension.Value = Mathf.MoveTowards(netRopeTension.Value, targetTension, 6f * Time.deltaTime);
 
-                    // Jika target adalah SAMPAH, tetap hitung getaran & cabutan tiap interval
                     if (latchedTrash != null)
                     {
-                        trashTugTimer -= Time.deltaTime;
-                        if (trashTugTimer <= 0f)
+                        if (syncTrashTugToRhythm)
                         {
-                            trashTugTimer = trashTugInterval;
-                            latchedTrash.TugTrash();
-
-                            if (latchedTrash.IsCleared)
+                            int strokeIdx = Mathf.FloorToInt(serverPullHoldTime * freq);
+                            if (strokeIdx != lastServerTrashStroke && phase >= duty * 0.25f)
                             {
-                                StopPullAndReset(false);
-                                yield break;
+                                lastServerTrashStroke = strokeIdx;
+                                latchedTrash.TugTrash();
+
+                                if (latchedTrash.IsCleared)
+                                {
+                                    StopPullAndReset(false);
+                                    yield break;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            trashTugTimer -= Time.deltaTime;
+                            if (trashTugTimer <= 0f)
+                            {
+                                trashTugTimer = trashTugInterval;
+                                latchedTrash.TugTrash();
+
+                                if (latchedTrash.IsCleared)
+                                {
+                                    StopPullAndReset(false);
+                                    yield break;
+                                }
                             }
                         }
                     }
                 }
                 else
                 {
+                    netIsPulling.Value = false;
                     trashTugTimer = 0f;
+                    serverPullHoldTime = 0f;
+                    lastServerTrashStroke = -1;
+
                     if (boatController != null)
                     {
                         boatController.SetPlayerPull(OwnerClientId, false, activeTargetPos, transform.position, activeTargetCol);
                     }
 
-                    // G: kendorkan tali, tapi TIDAK boleh melebihi jarak lempar maksimal (lassoRange).
                     if (serverSlackHeld && netRopeLength.Value < MaxSlackLength)
                     {
                         netRopeLength.Value = Mathf.Min(
@@ -539,7 +688,6 @@ public class LassoController : NetworkBehaviour
                         );
                     }
 
-                    // Tali selalu menahan kapal di ujung panjangnya (baik saat G ditekan maupun tidak).
                     bool nearlyTaut = actualDist > netRopeLength.Value - 0.05f;
                     netRopeTension.Value = Mathf.MoveTowards(netRopeTension.Value, nearlyTaut ? 1f : 0f, (nearlyTaut ? 5f : 3f) * Time.deltaTime);
                     if (boatController != null)
@@ -560,6 +708,7 @@ public class LassoController : NetworkBehaviour
 
     private IEnumerator RetractRopeRoutine()
     {
+        netIsPulling.Value = false;
         netState.Value = LassoState.Retracting;
         PlayLassoSfxClientRpc("lasso_release", 0.06f);
 
@@ -576,7 +725,6 @@ public class LassoController : NetworkBehaviour
         serverSequenceCoroutine = null;
     }
 
-    // Kecepatan gulung tali: cepat saat kendor banyak, melambat di akhir (supaya tali mengencang halus, tidak menyentak)
     private float ReelRate(float slackLength)
     {
         return Mathf.Clamp(slackLength * ropeReelEase, ropeReelMinSpeed, ropeReelSpeed);
@@ -592,12 +740,9 @@ public class LassoController : NetworkBehaviour
         {
             if (col == null || col.isTrigger) continue;
 
-            // Generated obstacles must explicitly opt in. A Batu/Sampah tag only means
-            // the object can collide with the boat; it no longer grants hookability.
             HookableTarget hookableTarget = col.GetComponentInParent<HookableTarget>();
             if (hookableTarget == null || !hookableTarget.CanBeHooked) continue;
 
-            // Sampah yang sudah lepas & hanyut tidak bisa di-hook lagi.
             TrashObstacle trashTarget = col.GetComponentInParent<TrashObstacle>();
             if (trashTarget != null && trashTarget.IsCleared) continue;
 
@@ -611,7 +756,6 @@ public class LassoController : NetworkBehaviour
         return closestTarget;
     }
 
-    /// <summary>Dipanggil server (mis. saat pemain respawn) untuk melepas tali seketika.</summary>
     public void ServerForceRelease()
     {
         if (!IsServer || netState.Value == LassoState.Idle) return;
@@ -647,6 +791,9 @@ public class LassoController : NetworkBehaviour
         latchedRockCollider = null;
         serverPullHeld = false;
         serverSlackHeld = false;
+        serverPullHoldTime = 0f;
+        lastServerTrashStroke = -1;
+        netIsPulling.Value = false;
         netRopeTension.Value = 0f;
 
         if (playRetractAnimation)

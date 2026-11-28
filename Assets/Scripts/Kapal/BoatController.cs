@@ -21,11 +21,21 @@ public class BoatController : NetworkBehaviour
     }
 
     [Header("Pengaturan Tarikan Halus & Natural")]
-    [SerializeField] private float pullAcceleration = 13.5f;     // Gaya dorong kontinu (sesuai Linear Damping = 3)
-    [SerializeField] private float maxPullSpeed = 4.2f;          // Batas kecepatan meluncur kapal yang nyaman & natural
-    [SerializeField] private float pullRampUpTime = 0.65f;       // Durasi percepatan awal (semakin besar = semakin halus, tanpa hentakan)
-    [SerializeField] private float cadenceFrequency = 0.85f;     // Irama tarikan tangan manusia per detik
-    [SerializeField] private float cadenceDepth = 0.22f;         // Variasi lembut irama tarikan (0 = datar, 0.22 = ayunan halus)
+    [SerializeField] private float pullAcceleration = 22.0f;     // Gaya dorong bertenaga (nyaman untuk Solo maupun tim)
+    [SerializeField] private float maxPullSpeed = 6.2f;          // Batas kecepatan meluncur kapal saat ditarik
+    [SerializeField] private float pullRampUpTime = 0.28f;       // Durasi percepatan awal agar langsung terasa namun tetap halus
+
+    [Header("Irama Tarikan Tangan (1___1___1)")]
+    [Tooltip("Jumlah tarikan tangan per detik (contoh: 1.2 = 1 tarikan tiap ~0.83 detik).")]
+    [SerializeField] private float cadenceFrequency = 1.20f;
+    [Tooltip("Porsi waktu menarik aktif dalam 1 siklus (sisanya fase jeda ganti tangan '___').")]
+    [SerializeField, Range(0.2f, 0.8f)] private float pullStrokeDuty = 0.45f;
+    [Tooltip("Kekuatan kontras irama tarikan (0 = datar, 0.9 = irama 1___1___1 terasa jelas).")]
+    [SerializeField, Range(0f, 1f)] private float cadenceDepth = 0.90f;
+    [Tooltip("Pengali tenaga saat momen tangan menarik ke belakang (1).")]
+    [SerializeField, Min(1f)] private float pullPeakMultiplier = 1.85f;
+    [Tooltip("Sisa tegangan saat jeda ganti tangan (___) agar kapal tidak mendadak terseret arus.")]
+    [SerializeField, Range(0f, 1f)] private float pullRestMultiplier = 0.38f;
 
     [Header("Pengaturan Rotasi Alami (Torque)")]
     [SerializeField] private float turnResponsiveness = 1.6f;    // Seberapa cepat lambung mengarah ke target
@@ -65,6 +75,9 @@ public class BoatController : NetworkBehaviour
     [Tooltip("Pakai material licin supaya kapal meluncur/berbelok saat menabrak batu, bukan menempel.")]
     [SerializeField] private bool slipperyHull = true;
 
+    public float PullCadenceFrequency => cadenceFrequency;
+    public float PullStrokeDuty => pullStrokeDuty;
+
     private Rigidbody rb;
     private Collider boatCollider;
 
@@ -89,13 +102,11 @@ public class BoatController : NetworkBehaviour
                          RigidbodyConstraints.FreezeRotationX |
                          RigidbodyConstraints.FreezeRotationZ;
 
-        // Pengaman jika Angular Damping di Inspector masih terlalu rendah
         if (rb.angularDamping < 2.5f)
         {
             rb.angularDamping = 3.5f;
         }
 
-        // Hambatan diganti drag relatif terhadap air (lihat ApplyRiverDrift), kalau tidak kapal tidak akan pernah mencapai kecepatan arus
         if (driftWithRiver) rb.linearDamping = 0f;
         if (slipperyHull) ApplySlipperyMaterial();
 
@@ -131,9 +142,6 @@ public class BoatController : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// Mengecek apakah lambung kapal sedang bersentuhan atau merapat ke permukaan target tertentu.
-    /// </summary>
     public bool IsTouchingOrAtSurface(Collider targetCol, Vector3 fallbackPoint)
     {
         if (targetCol != null && activeObstacleContacts.ContainsKey(targetCol))
@@ -169,9 +177,6 @@ public class BoatController : NetworkBehaviour
         return col.ClosestPoint(fromPoint);
     }
 
-    /// <summary>
-    /// Mengatur status tarikan kontinu dari pemain tertentu (dipanggil Server dari LassoController).
-    /// </summary>
     public void SetPlayerPull(ulong clientId, bool isPulling, Vector3 targetPos, Vector3 pullerWorldPos, Collider targetCollider)
     {
         if (!IsServer || !IsSpawned) return;
@@ -193,9 +198,6 @@ public class BoatController : NetworkBehaviour
         data.targetCollider = targetCollider;
     }
 
-    /// <summary>
-    /// Mengatur kaitan tali statis (saat tombol F & G tidak ditekan) dengan gaya fisika murni.
-    /// </summary>
     public void SetPlayerTether(ulong clientId, bool isActive, Vector3 anchorPos, Vector3 playerWorldPos, float maxLength)
     {
         if (!IsServer || !IsSpawned) return;
@@ -228,7 +230,6 @@ public class BoatController : NetworkBehaviour
     {
         if (!IsServer || !IsSpawned || rb.isKinematic) return;
 
-        // Tahan kapal tetap diam di posisi awal sampai seluruh pemain berhasil di-spawn
         if (!GameSpawner.IsMatchReady)
         {
             rb.linearVelocity = Vector3.zero;
@@ -241,7 +242,6 @@ public class BoatController : NetworkBehaviour
             return;
         }
 
-        // Perlambat kapal dengan lembut di area tujuan akhir setelah finis tercapai
         if (RiverFinishGoal.HasFinished)
         {
             float damp = Mathf.Exp(-3.5f * Time.fixedDeltaTime);
@@ -286,7 +286,6 @@ public class BoatController : NetworkBehaviour
         {
             PlayerPullData pull = kvp.Value;
 
-            // Jika sudah menyentuh permukaan batu/sampah TARGET, hentikan tarikan untuk pemain ini
             if (IsTouchingOrAtSurface(pull.targetCollider, pull.targetPos))
             {
                 pull.smoothWeight = Mathf.MoveTowards(pull.smoothWeight, 0f, dt * 4f);
@@ -297,14 +296,13 @@ public class BoatController : NetworkBehaviour
             toTarget.y = 0f;
             if (toTarget.sqrMagnitude < 0.001f) continue;
 
-            // 1. Ramp-up halus + gelombang irama tangan manusia (tanpa hentakan mendadak)
+            // 1. Ramp-up halus + pola irama tarikan tangan manusia (1___1___1)
             pull.holdTime += dt;
             float rampSpeed = (pullRampUpTime > 0.01f) ? (1f / pullRampUpTime) : 10f;
             pull.smoothWeight = Mathf.MoveTowards(pull.smoothWeight, 1f, dt * rampSpeed);
 
-            // SmoothStep membuat akselerasi awal melengkung lembut (ease-in-out)
             float easedWeight = pull.smoothWeight * pull.smoothWeight * (3f - 2f * pull.smoothWeight);
-            float cadence = 1f - cadenceDepth * 0.5f * (1f - Mathf.Sin(pull.holdTime * cadenceFrequency * Mathf.PI * 2f));
+            float cadence = EvaluatePullCadence(pull.holdTime);
 
             Vector3 desiredDir = toTarget.normalized;
             bool isDeflectingObstacle = false;
@@ -321,13 +319,11 @@ public class BoatController : NetworkBehaviour
                 {
                     isDeflectingObstacle = true;
 
-                    // Proyeksikan arah tarik agar sejajar dengan sisi batu (meluncur memutari batu)
                     Vector3 slideDir = Vector3.ProjectOnPlane(desiredDir, pushOutNormal);
                     slideDir.y = 0f;
 
                     if (slideDir.sqrMagnitude < 0.04f)
                     {
-                        // Jika menabrak tepat tegak lurus di tengah, pilih arah samping terdekat
                         Vector3 tangent = Vector3.Cross(Vector3.up, pushOutNormal).normalized;
                         Vector3 rockToBoat = transform.position - contact.Key.transform.position;
                         rockToBoat.y = 0f;
@@ -340,19 +336,39 @@ public class BoatController : NetworkBehaviour
                     }
 
                     desiredDir = Vector3.Lerp(desiredDir, slideDir, obstacleSlideBlend).normalized;
-
-                    // Dorongan tipis menjauhi permukaan batu agar kapal tidak menempel/terjepit
                     rb.AddForce(pushOutNormal * obstaclePushOutAccel * easedWeight, ForceMode.Acceleration);
                 }
             }
 
-            // 3. Terapkan gaya tarik murni ke Rigidbody (PhysX menjaga tidak ada penembusan)
+            // 3. Terapkan gaya tarik ke Rigidbody
             float effectiveAccel = pullAcceleration * easedWeight * cadence;
             rb.AddForce(desiredDir * effectiveAccel, ForceMode.Acceleration);
 
             // 4. Terapkan torsi rotasi halus agar sisi kapal yang ditarik menghadap arah gerak/target
             ApplyNaturalTurnTorque(desiredDir, pull.pullerWorldPos, easedWeight, isDeflectingObstacle);
         }
+    }
+
+    /// <summary>
+    /// Menghasilkan irama 1___1___1: tarikan kuat di awal siklus, lalu jeda meluncur saat ganti tangan.
+    /// </summary>
+    private float EvaluatePullCadence(float holdTime)
+    {
+        if (cadenceDepth <= 0.001f || cadenceFrequency <= 0.001f) return 1f;
+
+        float phase = Mathf.Repeat(holdTime * cadenceFrequency, 1f);
+        float duty = Mathf.Clamp(pullStrokeDuty, 0.15f, 0.85f);
+
+        float pulse = 0f;
+        if (phase < duty)
+        {
+            float u = phase / duty;
+            pulse = Mathf.Sin(Mathf.Pow(u, 0.75f) * Mathf.PI);
+            pulse *= pulse;
+        }
+
+        float shaped = Mathf.Lerp(pullRestMultiplier, pullPeakMultiplier, pulse);
+        return Mathf.Lerp(1f, shaped, cadenceDepth);
     }
 
     private void ApplyNaturalTurnTorque(Vector3 moveDir, Vector3 pullerWorldPos, float weight, bool isDeflectingObstacle)
@@ -380,11 +396,9 @@ public class BoatController : NetworkBehaviour
         float angleOffset = Vector3.SignedAngle(localPullDir, Vector3.forward, Vector3.up);
         Quaternion targetRotation = forwardToDir * Quaternion.Euler(0f, angleOffset, 0f);
 
-        // PD Controller dalam satuan radian/detik: memutar halus tanpa pernah memaksa menembus batu
         float angleErrorRad = Mathf.DeltaAngle(rb.rotation.eulerAngles.y, targetRotation.eulerAngles.y) * Mathf.Deg2Rad;
         float desiredAngularVel = Mathf.Clamp(angleErrorRad * turnResponsiveness, -maxTurnSpeedRad, maxTurnSpeedRad);
 
-        // Saat sedang meluncur menghindari batu penghalang, longgarkan torsi agar lambung bebas menyesuaikan sudut
         float obstacleTorqueScale = isDeflectingObstacle ? 0.35f : 1f;
         float torqueAccel = (desiredAngularVel - rb.angularVelocity.y) * turnTorqueGain * weight * obstacleTorqueScale;
 
@@ -409,11 +423,9 @@ public class BoatController : NetworkBehaviour
                 Vector3 outwardDir = outward / currentDist;
                 float outwardSpeed = Mathf.Max(0f, Vector3.Dot(rb.linearVelocity, outwardDir));
 
-                // Zona lembut: makin dekat ujung tali, makin kuat peredaman kecepatan menjauh (tidak mendadak)
                 float ramp = Mathf.Clamp01((currentDist - (tether.maxLength - soft)) / soft);
                 float pullBackAccel = ramp * ramp * outwardSpeed * 6f;
 
-                // Melewati panjang tali: pegas fisika murni (bukan MovePosition)
                 float excess = currentDist - tether.maxLength;
                 if (excess > 0f)
                 {
@@ -426,10 +438,6 @@ public class BoatController : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// Kapal hanyut mengikuti arus spline: percepatan menuju kecepatan arus di titik sungai terdekat.
-    /// Tabrakan dengan batu/benda lain ditangani PhysX (Rigidbody), jadi posisi & arah kapal berubah alami.
-    /// </summary>
     private void ApplyRiverDrift()
     {
         if (!driftWithRiver)
@@ -454,10 +462,9 @@ public class BoatController : NetworkBehaviour
             s = river.SampleAt(transform.position);
             flow = s.flowVelocity * flowInfluence;
             flow.y = 0f;
-            if (!float.IsFinite(flow.x) || !float.IsFinite(flow.z)) flow = Vector3.zero;   // pengaman NaN
+            if (!float.IsFinite(flow.x) || !float.IsFinite(flow.z)) flow = Vector3.zero;
         }
 
-        // Selama ditarik, arus melemah mengikuti kekuatan tarikan -> kapal langsung maju, bukan baru bergerak setelah F dilepas
         float pullWeight = 0f;
         foreach (var kvp in activePulls)
         {
@@ -467,7 +474,6 @@ public class BoatController : NetworkBehaviour
 
         currentFlow = flow;
 
-        // Drag relatif air: v -> flow. Tanpa tarikan, kapal menyamai kecepatan arus.
         Vector3 v = rb.linearVelocity;
         v.y = 0f;
         rb.AddForce((flow - v) * waterDrag, ForceMode.Acceleration);
@@ -489,7 +495,6 @@ public class BoatController : NetworkBehaviour
             }
         }
 
-        // Menghadap searah aliran hanya saat bebas (tidak ditarik, tidak sedang menempel di batu)
         if (alignHeadingToFlow && activePulls.Count == 0 && activeObstacleContacts.Count == 0 && flow.sqrMagnitude > 0.01f)
         {
             float targetYaw = Quaternion.LookRotation(flow.normalized, Vector3.up).eulerAngles.y + headingOffsetDegrees;
@@ -499,7 +504,6 @@ public class BoatController : NetworkBehaviour
         }
     }
 
-    // Batas kecepatan diukur RELATIF terhadap arus, supaya arus tidak ikut terpotong oleh maxPullSpeed
     private void ClampHorizontalSpeed()
     {
         Vector3 vel = rb.linearVelocity;
